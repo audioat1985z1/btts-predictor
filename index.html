@@ -222,6 +222,16 @@
   .fixture-match-note{font-size:11px;margin-top:2px;}
   .match-ok{color:var(--green);}
   .match-warn{color:var(--gold-soft);}
+  .arb-alert{
+    background:rgba(201,164,99,.12);
+    border:1px solid var(--gold);
+    border-radius:14px;
+    padding:14px 18px;
+    margin-bottom:16px;
+    font-size:13px;
+    color:var(--gold-soft);
+    line-height:1.6;
+  }
 </style>
 </head>
 <body>
@@ -373,6 +383,8 @@
       <div class="compare-item">Edge (EV)<b id="edgeValNo">--</b></div>
     </div>
 
+    <div class="arb-alert" id="arbWarning" style="display:none"></div>
+
     <div class="note">
       โมเดลนี้คำนวณ λ (expected goals) จาก attack/defense rating เทียบกับค่าเฉลี่ยลีก จากนั้นสร้าง scoreline matrix ด้วย Poisson แล้วปรับด้วย Dixon-Coles τ correction เพื่อแก้ correlation ในสกอร์ต่ำ (0-0, 1-0, 0-1, 1-1) ก่อนรวมความน่าจะเป็นของทุกช่องที่ทั้งสองทีมยิงได้ ≥1 ประตู เป็น P(BTTS Yes)
     </div>
@@ -505,6 +517,25 @@ function renderEdge(side, modelProb, oddsRaw){
   edgeEl.className = ev>=0 ? 'edge-pos':'edge-neg';
 }
 
+function checkArbWarning(oddsYesRaw, oddsNoRaw){
+  const box = document.getElementById('arbWarning');
+  const oddsYes = parseFloat(oddsYesRaw);
+  const oddsNo = parseFloat(oddsNoRaw);
+  if(!oddsYesRaw || !oddsNoRaw || !(oddsYes > 1) || !(oddsNo > 1)){
+    box.style.display = 'none';
+    return;
+  }
+  const impliedSum = (1/oddsYes + 1/oddsNo) * 100;
+  if(impliedSum < 100){
+    box.style.display = 'block';
+    box.innerHTML = `⚠ รวม implied probability ของราคา Yes+No = <b>${impliedSum.toFixed(1)}%</b> (ต่ำกว่า 100%) — `
+      + `ถ้าราคาทั้งสองมาจาก<b>บุ๊คเดียวกัน</b> ให้เช็คว่ากรอกราคาถูกต้องหรือไม่ก่อน อาจเป็นค่าที่พิมพ์ผิด `
+      + `แต่ถ้ามาจาก<b>คนละบุ๊ค</b> (line shopping) นี่คือสัญญาณ arbitrage — เดิมพันแบ่งสัดส่วนทั้งสองฝั่งจะได้กำไรแน่นอนไม่ว่าผลจะออกอะไร โดยไม่ต้องพึ่งความแม่นของโมเดลนี้เลย`;
+  } else {
+    box.style.display = 'none';
+  }
+}
+
 // football-data.co.uk league code -> football-data.org competition code
 // (only leagues covered by football-data.org's free tier get a fixtures calendar)
 const FIXTURES_COMPETITION_MAP = {
@@ -625,6 +656,7 @@ function selectFixture(idx, homeMatch, awayMatch){
     document.getElementById('noFair').textContent = 'fair odds --';
     document.getElementById('edgeBoxYes').style.display = 'none';
     document.getElementById('edgeBoxNo').style.display = 'none';
+    document.getElementById('arbWarning').style.display = 'none';
     document.getElementById('results').style.display = 'block';
     return;
   }
@@ -742,6 +774,7 @@ function calculate(){
 
   renderEdge('Yes', bttsYes, marketOddsRaw);
   renderEdge('No', bttsNo, marketOddsNoRaw);
+  checkArbWarning(marketOddsRaw, marketOddsNoRaw);
 
   document.getElementById('results').style.display = 'block';
 }
