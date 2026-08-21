@@ -585,7 +585,15 @@ function selectFixture(idx, homeMatch, awayMatch){
   const row = document.getElementById(`fixture-${idx}`);
   if(row) row.classList.add('selected');
 
-  if(!homeMatch || !awayMatch) return;
+  if(!homeMatch || !awayMatch){
+    document.getElementById('yesProb').textContent = 'N/A';
+    document.getElementById('noProb').textContent = 'N/A';
+    document.getElementById('yesFair').textContent = 'fair odds --';
+    document.getElementById('noFair').textContent = 'fair odds --';
+    document.getElementById('edgeBox').style.display = 'none';
+    document.getElementById('results').style.display = 'block';
+    return;
+  }
 
   const homeStats = fdTeamStats[homeMatch];
   const awayStats = fdTeamStats[awayMatch];
