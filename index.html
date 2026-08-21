@@ -323,6 +323,11 @@
 <script>
 document.getElementById('rho').addEventListener('input', e=>{
   document.getElementById('rhoVal').textContent = parseFloat(e.target.value).toFixed(2);
+  calculate();
+});
+
+['homeGF','homeGA','awayGF','awayGA','leagueAvg','marketOdds'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', calculate);
 });
 
 let fdTeamStats = {}; // { teamName: { homeGF:[], homeGA:[], awayGF:[], awayGA:[] } }
