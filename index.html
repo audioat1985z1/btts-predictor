@@ -308,12 +308,6 @@
       <div class="compare-item">Edge (EV)<b id="edgeVal">--</b></div>
     </div>
 
-    <div class="matrix-wrap">
-      <div class="matrix-title">Scoreline Probability Matrix (Dixon-Coles adjusted)</div>
-      <table class="matrix" id="matrixTable"></table>
-      <div class="hint" style="margin-top:10px">แถว = ประตูทีมเหย้า, คอลัมน์ = ประตูทีมเยือน — สีเข้ม = โอกาสสูงกว่า</div>
-    </div>
-
     <div class="note">
       โมเดลนี้คำนวณ λ (expected goals) จาก attack/defense rating เทียบกับค่าเฉลี่ยลีก จากนั้นสร้าง scoreline matrix ด้วย Poisson แล้วปรับด้วย Dixon-Coles τ correction เพื่อแก้ correlation ในสกอร์ต่ำ (0-0, 1-0, 0-1, 1-1) ก่อนรวมความน่าจะเป็นของทุกช่องที่ทั้งสองทีมยิงได้ ≥1 ประตู เป็น P(BTTS Yes)
     </div>
@@ -533,28 +527,6 @@ function calculate(){
   } else {
     edgeBox.style.display = 'none';
   }
-
-  // render matrix (only 0-5 for readability)
-  const showMax = 5;
-  let maxP = 0;
-  for(let x=0;x<=showMax;x++) for(let y=0;y<=showMax;y++) maxP = Math.max(maxP, matrix[x][y]);
-
-  let html = '<tr><th></th>';
-  for(let y=0;y<=showMax;y++) html += `<th>${y}</th>`;
-  html += '</tr>';
-  for(let x=0;x<=showMax;x++){
-    html += `<tr><th>${x}</th>`;
-    for(let y=0;y<=showMax;y++){
-      const p = matrix[x][y];
-      const intensity = p/maxP;
-      const bg = x>=1 && y>=1
-        ? `rgba(95,191,138,${0.15+intensity*0.85})`
-        : `rgba(217,105,95,${0.10+intensity*0.55})`;
-      html += `<td style="background:${bg}">${(p*100).toFixed(1)}</td>`;
-    }
-    html += '</tr>';
-  }
-  document.getElementById('matrixTable').innerHTML = html;
 
   document.getElementById('results').style.display = 'block';
 }
