@@ -22,6 +22,10 @@ export default async function handler(req, res) {
 
   try {
     const upstream = await fetch(upstreamUrl);
+    if (upstream.status === 300) {
+      res.status(404).json({ error: `ยังไม่มีข้อมูลลีก/ฤดูกาลนี้บน football-data.co.uk (ไฟล์ยังไม่ถูกเผยแพร่) ลองเลือกฤดูกาลอื่น`, url: upstreamUrl });
+      return;
+    }
     if (!upstream.ok) {
       res.status(upstream.status).json({ error: `Upstream returned HTTP ${upstream.status}`, url: upstreamUrl });
       return;
