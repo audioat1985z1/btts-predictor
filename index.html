@@ -335,9 +335,17 @@
 
   <div class="card" style="margin-bottom:16px">
     <h2><span class="dot"></span> เทียบกับราคาตลาด (ถ้ามี)</h2>
-    <label>Market odds BTTS Yes (decimal)</label>
-    <input type="number" id="marketOdds" step="0.01" placeholder="เช่น 1.85">
-    <div class="hint">ใส่ราคาจากเว็บพนัน/บุ๊คที่คุณดูอยู่ เพื่อเทียบ probability ของโมเดลกับราคาตลาดหา edge (เว้นว่างได้ถ้าไม่ต้องการ)</div>
+    <div class="row2">
+      <div>
+        <label>Market odds BTTS Yes (decimal)</label>
+        <input type="number" id="marketOdds" step="0.01" placeholder="เช่น 1.85">
+      </div>
+      <div>
+        <label>Market odds BTTS No (decimal)</label>
+        <input type="number" id="marketOddsNo" step="0.01" placeholder="เช่น 1.95">
+      </div>
+    </div>
+    <div class="hint">ใส่ราคาจากเว็บพนัน/บุ๊คที่คุณดูอยู่ ฝั่งไหนก็ได้หรือทั้งสองฝั่ง เพื่อเทียบ probability ของโมเดลกับราคาตลาดหา edge แต่ละฝั่งแยกกัน (เว้นว่างได้ถ้าไม่ต้องการ)</div>
   </div>
 
   <div class="results" id="results" style="display:none">
@@ -354,10 +362,15 @@
       </div>
     </div>
 
-    <div class="compare-box" id="edgeBox" style="display:none">
-      <div class="compare-item">Model probability<b id="edgeModelProb">--</b></div>
-      <div class="compare-item">Market implied prob<b id="edgeMarketProb">--</b></div>
-      <div class="compare-item">Edge (EV)<b id="edgeVal">--</b></div>
+    <div class="compare-box" id="edgeBoxYes" style="display:none">
+      <div class="compare-item">BTTS Yes — Model prob<b id="edgeModelProbYes">--</b></div>
+      <div class="compare-item">Market implied<b id="edgeMarketProbYes">--</b></div>
+      <div class="compare-item">Edge (EV)<b id="edgeValYes">--</b></div>
+    </div>
+    <div class="compare-box" id="edgeBoxNo" style="display:none">
+      <div class="compare-item">BTTS No — Model prob<b id="edgeModelProbNo">--</b></div>
+      <div class="compare-item">Market implied<b id="edgeMarketProbNo">--</b></div>
+      <div class="compare-item">Edge (EV)<b id="edgeValNo">--</b></div>
     </div>
 
     <div class="note">
@@ -372,7 +385,7 @@ document.getElementById('rho').addEventListener('input', e=>{
   calculate();
 });
 
-['homeGF','homeGA','awayGF','awayGA','leagueAvg','marketOdds'].forEach(id=>{
+['homeGF','homeGA','awayGF','awayGA','leagueAvg','marketOdds','marketOddsNo'].forEach(id=>{
   document.getElementById(id).addEventListener('input', calculate);
 });
 
@@ -473,6 +486,23 @@ async function fetchFootballDataCSV(){
 function avg(arr){
   if(arr.length === 0) return null;
   return arr.reduce((a,b)=>a+b,0) / arr.length;
+}
+
+function renderEdge(side, modelProb, oddsRaw){
+  const box = document.getElementById('edgeBox'+side);
+  const odds = parseFloat(oddsRaw);
+  if(!oddsRaw || !(odds > 1)){
+    box.style.display = 'none';
+    return;
+  }
+  const marketImplied = 1/odds;
+  const ev = (modelProb*odds - 1)*100;
+  box.style.display = 'flex';
+  document.getElementById('edgeModelProb'+side).textContent = (modelProb*100).toFixed(1)+'%';
+  document.getElementById('edgeMarketProb'+side).textContent = (marketImplied*100).toFixed(1)+'%';
+  const edgeEl = document.getElementById('edgeVal'+side);
+  edgeEl.textContent = (ev>=0?'+':'') + ev.toFixed(1)+'%';
+  edgeEl.className = ev>=0 ? 'edge-pos':'edge-neg';
 }
 
 // football-data.co.uk league code -> football-data.org competition code
@@ -593,7 +623,8 @@ function selectFixture(idx, homeMatch, awayMatch){
     document.getElementById('noProb').textContent = 'N/A';
     document.getElementById('yesFair').textContent = 'fair odds --';
     document.getElementById('noFair').textContent = 'fair odds --';
-    document.getElementById('edgeBox').style.display = 'none';
+    document.getElementById('edgeBoxYes').style.display = 'none';
+    document.getElementById('edgeBoxNo').style.display = 'none';
     document.getElementById('results').style.display = 'block';
     return;
   }
@@ -661,6 +692,7 @@ function calculate(){
   const leagueAvg = parseFloat(document.getElementById('leagueAvg').value);
   const rho = parseFloat(document.getElementById('rho').value);
   const marketOddsRaw = document.getElementById('marketOdds').value;
+  const marketOddsNoRaw = document.getElementById('marketOddsNo').value;
 
   // League average goals per team per game (assume symmetric split of total)
   const leagueAvgPerTeam = leagueAvg / 2;
@@ -708,20 +740,8 @@ function calculate(){
   document.getElementById('yesFair').textContent = 'fair odds ' + (1/bttsYes).toFixed(2);
   document.getElementById('noFair').textContent = 'fair odds ' + (1/bttsNo).toFixed(2);
 
-  const edgeBox = document.getElementById('edgeBox');
-  if(marketOddsRaw && parseFloat(marketOddsRaw) > 1){
-    const marketOdds = parseFloat(marketOddsRaw);
-    const marketImplied = 1/marketOdds;
-    const ev = (bttsYes*marketOdds - 1)*100;
-    edgeBox.style.display = 'flex';
-    document.getElementById('edgeModelProb').textContent = (bttsYes*100).toFixed(1)+'%';
-    document.getElementById('edgeMarketProb').textContent = (marketImplied*100).toFixed(1)+'%';
-    const edgeEl = document.getElementById('edgeVal');
-    edgeEl.textContent = (ev>=0?'+':'') + ev.toFixed(1)+'%';
-    edgeEl.className = ev>=0 ? 'edge-pos':'edge-neg';
-  } else {
-    edgeBox.style.display = 'none';
-  }
+  renderEdge('Yes', bttsYes, marketOddsRaw);
+  renderEdge('No', bttsNo, marketOddsNoRaw);
 
   document.getElementById('results').style.display = 'block';
 }
