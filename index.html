@@ -329,12 +329,15 @@
         <div class="hint">ค่าลบ = ลดโอกาสสกอร์เตี้ย (0-0,1-0,0-1,1-1) เล็กน้อยเทียบกับ independent Poisson — ค่าทั่วไปจาก fit ข้อมูลจริงอยู่ราว -0.1 ถึง -0.2</div>
       </div>
 
-      <label style="margin-top:16px">Market odds BTTS Yes (ถ้ามี, decimal)</label>
-      <input type="number" id="marketOdds" step="0.01" placeholder="เช่น 1.85">
-      <div class="hint">ใส่ถ้าอยากเทียบหา edge เทียบราคาตลาด (เว้นว่างได้ถ้าไม่ต้องการ)</div>
-
       <button class="calc" onclick="calculate()">คำนวณ BTTS</button>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2><span class="dot"></span> เทียบกับราคาตลาด (ถ้ามี)</h2>
+    <label>Market odds BTTS Yes (decimal)</label>
+    <input type="number" id="marketOdds" step="0.01" placeholder="เช่น 1.85">
+    <div class="hint">ใส่ราคาจากเว็บพนัน/บุ๊คที่คุณดูอยู่ เพื่อเทียบ probability ของโมเดลกับราคาตลาดหา edge (เว้นว่างได้ถ้าไม่ต้องการ)</div>
   </div>
 
   <div class="results" id="results" style="display:none">
