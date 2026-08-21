@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTTS Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-950:#0a0e1a;
+    --navy-900:#0f1524;
+    --navy-800:#161d30;
+    --navy-700:#1e2740;
+    --navy-600:#2a3552;
+    --gold:#c9a463;
+    --gold-soft:#e0c48f;
+    --text-main:#e8e6df;
+    --text-dim:#8b93a8;
+    --green:#5fbf8a;
+    --red:#d9695f;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(circle at 20% 0%, var(--navy-800), var(--navy-950) 60%);
+    color:var(--text-main);
+    font-family:'Sarabun',sans-serif;
+    min-height:100vh;
+    padding:24px 16px 60px;
+  }
+  .wrap{max-width:920px;margin:0 auto;}
+  h1{
+    font-family:'Kanit',sans-serif;
+    font-weight:600;
+    font-size:26px;
+    letter-spacing:.5px;
+    margin:0 0 4px;
+    color:var(--gold-soft);
+  }
+  .sub{color:var(--text-dim);font-size:14px;margin-bottom:28px;}
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+  }
+  @media (max-width:640px){ .grid{grid-template-columns:1fr;} }
+  .card{
+    background:linear-gradient(180deg, var(--navy-800), var(--navy-900));
+    border:1px solid var(--navy-600);
+    border-radius:14px;
+    padding:20px;
+  }
+  .card h2{
+    font-family:'Kanit',sans-serif;
+    font-size:16px;
+    font-weight:500;
+    margin:0 0 14px;
+    color:var(--gold);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--gold);display:inline-block;}
+  label{
+    display:block;
+    font-size:12.5px;
+    color:var(--text-dim);
+    margin:12px 0 5px;
+  }
+  input[type=number], input[type=text]{
+    width:100%;
+    background:var(--navy-700);
+    border:1px solid var(--navy-600);
+    border-radius:8px;
+    padding:9px 11px;
+    color:var(--text-main);
+    font-family:'Sarabun',sans-serif;
+    font-size:14.5px;
+    outline:none;
+    transition:border-color .15s;
+  }
+  input:focus{border-color:var(--gold);}
+  select{
+    width:100%;
+    background:var(--navy-700);
+    border:1px solid var(--navy-600);
+    border-radius:8px;
+    padding:9px 11px;
+    color:var(--text-main);
+    font-family:'Sarabun',sans-serif;
+    font-size:14.5px;
+    outline:none;
+  }
+  select:focus{border-color:var(--gold);}
+  code{
+    background:var(--navy-700);
+    padding:1px 5px;
+    border-radius:4px;
+    color:var(--gold-soft);
+    font-size:11px;
+  }
+  .status-ok{color:var(--green);}
+  .status-err{color:var(--red);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .slider-row{margin-top:14px;}
+  input[type=range]{
+    width:100%;
+    accent-color:var(--gold);
+  }
+  .slider-val{font-size:12.5px;color:var(--gold-soft);float:right;}
+  button.calc{
+    margin-top:22px;
+    width:100%;
+    background:linear-gradient(180deg, var(--gold-soft), var(--gold));
+    color:var(--navy-950);
+    border:none;
+    border-radius:10px;
+    padding:13px;
+    font-family:'Kanit',sans-serif;
+    font-weight:600;
+    font-size:15px;
+    cursor:pointer;
+    letter-spacing:.3px;
+  }
+  button.calc:hover{filter:brightness(1.06);}
+  .results{margin-top:20px;}
+  .prob-cards{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+    margin-bottom:16px;
+  }
+  .prob-card{
+    background:var(--navy-800);
+    border:1px solid var(--navy-600);
+    border-radius:14px;
+    padding:20px;
+    text-align:center;
+  }
+  .prob-card.yes{border-color:rgba(95,191,138,.4);}
+  .prob-card.no{border-color:rgba(217,105,95,.4);}
+  .prob-label{font-size:12.5px;color:var(--text-dim);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase;}
+  .prob-num{font-family:'Kanit',sans-serif;font-weight:700;font-size:34px;}
+  .prob-card.yes .prob-num{color:var(--green);}
+  .prob-card.no .prob-num{color:var(--red);}
+  .prob-sub{font-size:11.5px;color:var(--text-dim);margin-top:4px;}
+  .compare-box{
+    background:var(--navy-800);
+    border:1px solid var(--navy-600);
+    border-radius:14px;
+    padding:16px 20px;
+    margin-bottom:16px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .compare-item{font-size:13px;color:var(--text-dim);}
+  .compare-item b{color:var(--text-main);font-size:15px;display:block;margin-top:2px;font-family:'Kanit',sans-serif;}
+  .edge-pos{color:var(--green)!important;}
+  .edge-neg{color:var(--red)!important;}
+  .matrix-wrap{
+    background:var(--navy-800);
+    border:1px solid var(--navy-600);
+    border-radius:14px;
+    padding:20px;
+    overflow-x:auto;
+  }
+  .matrix-title{font-family:'Kanit',sans-serif;font-size:14px;color:var(--gold);margin-bottom:12px;}
+  table.matrix{border-collapse:collapse;width:100%;font-size:12px;}
+  table.matrix th, table.matrix td{
+    padding:6px 8px;
+    text-align:center;
+    min-width:34px;
+  }
+  table.matrix th{color:var(--text-dim);font-weight:500;}
+  table.matrix td{
+    border-radius:5px;
+    color:var(--navy-950);
+    font-weight:600;
+  }
+  .note{
+    font-size:12px;
+    color:var(--text-dim);
+    margin-top:16px;
+    line-height:1.6;
+    border-top:1px solid var(--navy-700);
+    padding-top:14px;
+  }
+  .hint{font-size:11px;color:var(--text-dim);margin-top:4px;line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BTTS Predictor</h1>
+  <div class="sub">โมเดลทาย Both Teams To Score ด้วย Poisson + Dixon-Coles correlation adjustment</div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2><span class="dot"></span> ดึงข้อมูลฟรีจาก Football-Data.co.uk (ผ่าน backend proxy ของเว็บนี้ — ไม่ต้องมี API key)</h2>
+    <div class="row2">
+      <div>
+        <label>เลือกลีก</label>
+        <select id="fdLeagueSelect">
+          <option value="E0">England - Premier League</option>
+          <option value="E1">England - Championship</option>
+          <option value="E2">England - League One</option>
+          <option value="D1">Germany - Bundesliga</option>
+          <option value="D2">Germany - 2. Bundesliga</option>
+          <option value="SP1">Spain - La Liga</option>
+          <option value="SP2">Spain - Segunda</option>
+          <option value="I1">Italy - Serie A</option>
+          <option value="I2">Italy - Serie B</option>
+          <option value="F1">France - Ligue 1</option>
+          <option value="F2">France - Ligue 2</option>
+          <option value="N1">Netherlands - Eredivisie</option>
+          <option value="P1">Portugal - Primeira Liga</option>
+          <option value="B1">Belgium - Pro League</option>
+          <option value="T1">Turkey - Super Lig</option>
+          <option value="G1">Greece - Super League</option>
+          <option value="SC0">Scotland - Premiership</option>
+        </select>
+      </div>
+      <div>
+        <label>ฤดูกาล</label>
+        <select id="fdSeasonSelect">
+          <option value="2627">2026/27</option>
+          <option value="2526">2025/26</option>
+          <option value="2425">2024/25</option>
+          <option value="2324">2023/24</option>
+          <option value="2223">2022/23</option>
+        </select>
+      </div>
+    </div>
+    <div class="hint">ไฟล์ CSV เป็นข้อมูลสาธารณะ ฟรี ไม่ต้องสมัครอะไร — ดึงผ่าน backend proxy ของเว็บนี้เอง (แก้ปัญหา CORS ที่เคยติดตอนยิงตรงจาก browser)</div>
+    <label style="margin-top:12px">หรือใส่รหัสฤดูกาลเอง (เช่น 2728 สำหรับปี 2027/28)</label>
+    <input type="text" id="fdSeasonCustom" placeholder="เว้นว่างไว้ถ้าจะใช้ค่าที่เลือกด้านบน">
+    <button class="calc" style="margin-top:14px" onclick="fetchFootballDataCSV()">ดึงข้อมูลลีกนี้</button>
+    <div id="fdStatus" class="hint" style="margin-top:10px"></div>
+
+    <div id="fdTeamPickers" style="display:none;margin-top:16px">
+      <div class="row2">
+        <div>
+          <label>เลือกทีมเหย้า</label>
+          <select id="fdHomeTeamSelect" onchange="applyFDTeamSelection('home')"></select>
+        </div>
+        <div>
+          <label>เลือกทีมเยือน</label>
+          <select id="fdAwayTeamSelect" onchange="applyFDTeamSelection('away')"></select>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:8px">คำนวณจากผลบอลทุกนัดในฤดูกาลที่เลือก (home-splitted GF/GA)</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2><span class="dot"></span> ทีมเหย้า</h2>
+      <label>ประตูที่ยิงได้เฉลี่ย/เกม (เหย้า)</label>
+      <input type="number" id="homeGF" step="0.01" value="1.65">
+      <label>ประตูที่เสียเฉลี่ย/เกม (เหย้า)</label>
+      <input type="number" id="homeGA" step="0.01" value="1.10">
+
+      <h2 style="margin-top:20px"><span class="dot" style="background:var(--text-dim)"></span> ทีมเยือน</h2>
+      <label>ประตูที่ยิงได้เฉลี่ย/เกม (เยือน)</label>
+      <input type="number" id="awayGF" step="0.01" value="1.20">
+      <label>ประตูที่เสียเฉลี่ย/เกม (เยือน)</label>
+      <input type="number" id="awayGA" step="0.01" value="1.35">
+    </div>
+
+    <div class="card">
+      <h2><span class="dot"></span> ค่าลีก & โมเดล</h2>
+      <label>ค่าเฉลี่ยประตูรวม/เกมของลีก</label>
+      <input type="number" id="leagueAvg" step="0.01" value="2.70">
+      <div class="hint">ใช้ normalize attack/defense rating — ดูจากค่าเฉลี่ยประตูรวมทั้งสองทีมต่อเกมของลีกนั้นๆ</div>
+
+      <div class="slider-row">
+        <label style="margin:0">Dixon-Coles ρ (correlation) <span class="slider-val" id="rhoVal">-0.13</span></label>
+        <input type="range" id="rho" min="-0.30" max="0" step="0.01" value="-0.13">
+        <div class="hint">ค่าลบ = ลดโอกาสสกอร์เตี้ย (0-0,1-0,0-1,1-1) เล็กน้อยเทียบกับ independent Poisson — ค่าทั่วไปจาก fit ข้อมูลจริงอยู่ราว -0.1 ถึง -0.2</div>
+      </div>
+
+      <label style="margin-top:16px">Market odds BTTS Yes (ถ้ามี, decimal)</label>
+      <input type="number" id="marketOdds" step="0.01" placeholder="เช่น 1.85">
+      <div class="hint">ใส่ถ้าอยากเทียบหา edge เทียบราคาตลาด (เว้นว่างได้ถ้าไม่ต้องการ)</div>
+
+      <button class="calc" onclick="calculate()">คำนวณ BTTS</button>
+    </div>
+  </div>
+
+  <div class="results" id="results" style="display:none">
+    <div class="prob-cards">
+      <div class="prob-card yes">
+        <div class="prob-label">BTTS Yes</div>
+        <div class="prob-num" id="yesProb">--%</div>
+        <div class="prob-sub" id="yesFair">fair odds --</div>
+      </div>
+      <div class="prob-card no">
+        <div class="prob-label">BTTS No</div>
+        <div class="prob-num" id="noProb">--%</div>
+        <div class="prob-sub" id="noFair">fair odds --</div>
+      </div>
+    </div>
+
+    <div class="compare-box" id="edgeBox" style="display:none">
+      <div class="compare-item">Model probability<b id="edgeModelProb">--</b></div>
+      <div class="compare-item">Market implied prob<b id="edgeMarketProb">--</b></div>
+      <div class="compare-item">Edge (EV)<b id="edgeVal">--</b></div>
+    </div>
+
+    <div class="matrix-wrap">
+      <div class="matrix-title">Scoreline Probability Matrix (Dixon-Coles adjusted)</div>
+      <table class="matrix" id="matrixTable"></table>
+      <div class="hint" style="margin-top:10px">แถว = ประตูทีมเหย้า, คอลัมน์ = ประตูทีมเยือน — สีเข้ม = โอกาสสูงกว่า</div>
+    </div>
+
+    <div class="note">
+      โมเดลนี้คำนวณ λ (expected goals) จาก attack/defense rating เทียบกับค่าเฉลี่ยลีก จากนั้นสร้าง scoreline matrix ด้วย Poisson แล้วปรับด้วย Dixon-Coles τ correction เพื่อแก้ correlation ในสกอร์ต่ำ (0-0, 1-0, 0-1, 1-1) ก่อนรวมความน่าจะเป็นของทุกช่องที่ทั้งสองทีมยิงได้ ≥1 ประตู เป็น P(BTTS Yes)
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('rho').addEventListener('input', e=>{
+  document.getElementById('rhoVal').textContent = parseFloat(e.target.value).toFixed(2);
+});
+
+let fdTeamStats = {}; // { teamName: { homeGF:[], homeGA:[], awayGF:[], awayGA:[] } }
+let fdAllGoals = [];
+
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if(lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim());
+  const rows = [];
+  for(let i=1;i<lines.length;i++){
+    // simple split; football-data.co.uk numeric/text fields rarely contain commas inside quotes for core columns
+    const cols = lines[i].split(',');
+    if(cols.length < headers.length) continue;
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = cols[idx]; });
+    rows.push(row);
+  }
+  return rows;
+}
+
+async function fetchFootballDataCSV(){
+  const statusEl = document.getElementById('fdStatus');
+  const league = document.getElementById('fdLeagueSelect').value;
+  const customSeason = document.getElementById('fdSeasonCustom').value.trim();
+  const season = customSeason || document.getElementById('fdSeasonSelect').value;
+  const url = `/api/csv?league=${encodeURIComponent(league)}&season=${encodeURIComponent(season)}`;
+
+  statusEl.className = 'hint';
+  statusEl.textContent = 'กำลังดึงข้อมูล...';
+
+  try{
+    const res = await fetch(url);
+    if(!res.ok){
+      let msg = `HTTP ${res.status}`;
+      try{ const j = await res.json(); if(j.error) msg = j.error; }catch(e){}
+      throw new Error(msg);
+    }
+    const text = await res.text();
+    const rows = parseCSV(text);
+
+    const validRows = rows.filter(r => r.HomeTeam && r.AwayTeam && r.FTHG !== undefined && r.FTAG !== undefined && r.FTHG !== '' && r.FTAG !== '');
+    if(validRows.length === 0){
+      throw new Error('ไม่พบข้อมูลแมตช์ที่ใช้ได้ในไฟล์นี้ (อาจเป็นเพราะฤดูกาลยังไม่เริ่ม หรือลีกนี้ไม่มีข้อมูล)');
+    }
+
+    fdTeamStats = {};
+    fdAllGoals = [];
+
+    validRows.forEach(r => {
+      const home = r.HomeTeam.trim();
+      const away = r.AwayTeam.trim();
+      const fthg = parseInt(r.FTHG, 10);
+      const ftag = parseInt(r.FTAG, 10);
+      if(isNaN(fthg) || isNaN(ftag)) return;
+
+      if(!fdTeamStats[home]) fdTeamStats[home] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
+      if(!fdTeamStats[away]) fdTeamStats[away] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
+
+      fdTeamStats[home].homeGF.push(fthg);
+      fdTeamStats[home].homeGA.push(ftag);
+      fdTeamStats[away].awayGF.push(ftag);
+      fdTeamStats[away].awayGA.push(fthg);
+
+      fdAllGoals.push(fthg + ftag);
+    });
+
+    const teamNames = Object.keys(fdTeamStats).sort();
+    const homeSel = document.getElementById('fdHomeTeamSelect');
+    const awaySel = document.getElementById('fdAwayTeamSelect');
+    homeSel.innerHTML = '<option value="">-- เลือกทีม --</option>';
+    awaySel.innerHTML = '<option value="">-- เลือกทีม --</option>';
+    teamNames.forEach(name => {
+      const opt1 = document.createElement('option'); opt1.value = name; opt1.textContent = name;
+      homeSel.appendChild(opt1);
+      const opt2 = document.createElement('option'); opt2.value = name; opt2.textContent = name;
+      awaySel.appendChild(opt2);
+    });
+
+    // league average goals per game
+    if(fdAllGoals.length > 0){
+      const avgTotal = fdAllGoals.reduce((a,b)=>a+b,0) / fdAllGoals.length;
+      document.getElementById('leagueAvg').value = avgTotal.toFixed(2);
+    }
+
+    document.getElementById('fdTeamPickers').style.display = 'block';
+    statusEl.className = 'hint status-ok';
+    statusEl.textContent = `ดึงข้อมูลสำเร็จ — พบ ${validRows.length} แมตช์, ${teamNames.length} ทีม เลือกทีมเหย้า/เยือนด้านล่างได้เลย`;
+
+  } catch(err){
+    statusEl.className = 'hint status-err';
+    statusEl.textContent = 'ดึงข้อมูลไม่สำเร็จ: ' + err.message;
+    console.error(err);
+  }
+}
+
+function avg(arr){
+  if(arr.length === 0) return null;
+  return arr.reduce((a,b)=>a+b,0) / arr.length;
+}
+
+function applyFDTeamSelection(which){
+  const sel = document.getElementById(which === 'home' ? 'fdHomeTeamSelect' : 'fdAwayTeamSelect');
+  const teamName = sel.value;
+  if(!teamName || !fdTeamStats[teamName]) return;
+  const stats = fdTeamStats[teamName];
+
+  if(which === 'home'){
+    const gf = avg(stats.homeGF);
+    const ga = avg(stats.homeGA);
+    if(gf !== null) document.getElementById('homeGF').value = gf.toFixed(2);
+    if(ga !== null) document.getElementById('homeGA').value = ga.toFixed(2);
+  } else {
+    const gf = avg(stats.awayGF);
+    const ga = avg(stats.awayGA);
+    if(gf !== null) document.getElementById('awayGF').value = gf.toFixed(2);
+    if(ga !== null) document.getElementById('awayGA').value = ga.toFixed(2);
+  }
+  calculate();
+}
+
+
+function factorial(n){
+  let r=1; for(let i=2;i<=n;i++) r*=i; return r;
+}
+function poissonP(k, lambda){
+  return Math.exp(-lambda) * Math.pow(lambda,k) / factorial(k);
+}
+function tau(x,y,lh,la,rho){
+  if(x===0 && y===0) return 1 - (lh*la*rho);
+  if(x===0 && y===1) return 1 + (lh*rho);
+  if(x===1 && y===0) return 1 + (la*rho);
+  if(x===1 && y===1) return 1 - rho;
+  return 1;
+}
+
+function calculate(){
+  const homeGF = parseFloat(document.getElementById('homeGF').value);
+  const homeGA = parseFloat(document.getElementById('homeGA').value);
+  const awayGF = parseFloat(document.getElementById('awayGF').value);
+  const awayGA = parseFloat(document.getElementById('awayGA').value);
+  const leagueAvg = parseFloat(document.getElementById('leagueAvg').value);
+  const rho = parseFloat(document.getElementById('rho').value);
+  const marketOddsRaw = document.getElementById('marketOdds').value;
+
+  // League average goals per team per game (assume symmetric split of total)
+  const leagueAvgPerTeam = leagueAvg / 2;
+
+  // attack/defense strength relative to league average
+  const homeAttack = homeGF / leagueAvgPerTeam;
+  const homeDefense = homeGA / leagueAvgPerTeam;
+  const awayAttack = awayGF / leagueAvgPerTeam;
+  const awayDefense = awayGA / leagueAvgPerTeam;
+
+  // expected goals
+  const lambdaHome = homeAttack * awayDefense * leagueAvgPerTeam;
+  const lambdaAway = awayAttack * homeDefense * leagueAvgPerTeam;
+
+  const maxGoals = 8;
+  let matrix = [];
+  let total = 0;
+  for(let x=0;x<=maxGoals;x++){
+    let row = [];
+    for(let y=0;y<=maxGoals;y++){
+      let p = poissonP(x, lambdaHome) * poissonP(y, lambdaAway) * tau(x,y,lambdaHome,lambdaAway,rho);
+      if(p<0) p=0;
+      row.push(p);
+      total += p;
+    }
+    matrix.push(row);
+  }
+  // normalize
+  for(let x=0;x<=maxGoals;x++){
+    for(let y=0;y<=maxGoals;y++){
+      matrix[x][y] = matrix[x][y]/total;
+    }
+  }
+
+  let bttsYes = 0;
+  for(let x=1;x<=maxGoals;x++){
+    for(let y=1;y<=maxGoals;y++){
+      bttsYes += matrix[x][y];
+    }
+  }
+  const bttsNo = 1 - bttsYes;
+
+  document.getElementById('yesProb').textContent = (bttsYes*100).toFixed(1)+'%';
+  document.getElementById('noProb').textContent = (bttsNo*100).toFixed(1)+'%';
+  document.getElementById('yesFair').textContent = 'fair odds ' + (1/bttsYes).toFixed(2);
+  document.getElementById('noFair').textContent = 'fair odds ' + (1/bttsNo).toFixed(2);
+
+  const edgeBox = document.getElementById('edgeBox');
+  if(marketOddsRaw && parseFloat(marketOddsRaw) > 1){
+    const marketOdds = parseFloat(marketOddsRaw);
+    const marketImplied = 1/marketOdds;
+    const ev = (bttsYes*marketOdds - 1)*100;
+    edgeBox.style.display = 'flex';
+    document.getElementById('edgeModelProb').textContent = (bttsYes*100).toFixed(1)+'%';
+    document.getElementById('edgeMarketProb').textContent = (marketImplied*100).toFixed(1)+'%';
+    const edgeEl = document.getElementById('edgeVal');
+    edgeEl.textContent = (ev>=0?'+':'') + ev.toFixed(1)+'%';
+    edgeEl.className = ev>=0 ? 'edge-pos':'edge-neg';
+  } else {
+    edgeBox.style.display = 'none';
+  }
+
+  // render matrix (only 0-5 for readability)
+  const showMax = 5;
+  let maxP = 0;
+  for(let x=0;x<=showMax;x++) for(let y=0;y<=showMax;y++) maxP = Math.max(maxP, matrix[x][y]);
+
+  let html = '<tr><th></th>';
+  for(let y=0;y<=showMax;y++) html += `<th>${y}</th>`;
+  html += '</tr>';
+  for(let x=0;x<=showMax;x++){
+    html += `<tr><th>${x}</th>`;
+    for(let y=0;y<=showMax;y++){
+      const p = matrix[x][y];
+      const intensity = p/maxP;
+      const bg = x>=1 && y>=1
+        ? `rgba(95,191,138,${0.15+intensity*0.85})`
+        : `rgba(217,105,95,${0.10+intensity*0.55})`;
+      html += `<td style="background:${bg}">${(p*100).toFixed(1)}</td>`;
+    }
+    html += '</tr>';
+  }
+  document.getElementById('matrixTable').innerHTML = html;
+
+  document.getElementById('results').style.display = 'block';
+}
+
+calculate();
+</script>
+</body>
+</html>
