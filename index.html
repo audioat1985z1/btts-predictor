@@ -404,6 +404,31 @@ document.getElementById('rho').addEventListener('input', e=>{
 let fdTeamStats = {}; // { teamName: { homeGF:[], homeGA:[], awayGF:[], awayGA:[] } }
 let fdAllGoals = [];
 
+// England/Germany/Spain/Italy/France: map top flight -> next tier down,
+// so a team newly promoted this season (with no history in the top flight
+// CSV yet) can still be found using last season's lower-division stats.
+const LOWER_TIER_MAP = { E0: 'E1', E1: 'E2', D1: 'D2', SP1: 'SP2', I1: 'I2', F1: 'F2' };
+
+let fdPromotedTeams = new Set(); // teams whose stats came from the lower-tier fallback
+
+function buildTeamStatsFromRows(validRows, statsOut){
+  validRows.forEach(r => {
+    const home = r.HomeTeam.trim();
+    const away = r.AwayTeam.trim();
+    const fthg = parseInt(r.FTHG, 10);
+    const ftag = parseInt(r.FTAG, 10);
+    if(isNaN(fthg) || isNaN(ftag)) return;
+
+    if(!statsOut[home]) statsOut[home] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
+    if(!statsOut[away]) statsOut[away] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
+
+    statsOut[home].homeGF.push(fthg);
+    statsOut[home].homeGA.push(ftag);
+    statsOut[away].awayGF.push(ftag);
+    statsOut[away].awayGA.push(fthg);
+  });
+}
+
 function parseCSV(text){
   const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
   if(lines.length < 2) return [];
@@ -447,24 +472,31 @@ async function fetchFootballDataCSV(){
 
     fdTeamStats = {};
     fdAllGoals = [];
+    fdPromotedTeams = new Set();
 
+    buildTeamStatsFromRows(validRows, fdTeamStats);
     validRows.forEach(r => {
-      const home = r.HomeTeam.trim();
-      const away = r.AwayTeam.trim();
-      const fthg = parseInt(r.FTHG, 10);
-      const ftag = parseInt(r.FTAG, 10);
-      if(isNaN(fthg) || isNaN(ftag)) return;
-
-      if(!fdTeamStats[home]) fdTeamStats[home] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
-      if(!fdTeamStats[away]) fdTeamStats[away] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
-
-      fdTeamStats[home].homeGF.push(fthg);
-      fdTeamStats[home].homeGA.push(ftag);
-      fdTeamStats[away].awayGF.push(ftag);
-      fdTeamStats[away].awayGA.push(fthg);
-
-      fdAllGoals.push(fthg + ftag);
+      const fthg = parseInt(r.FTHG, 10), ftag = parseInt(r.FTAG, 10);
+      if(!isNaN(fthg) && !isNaN(ftag)) fdAllGoals.push(fthg + ftag);
     });
+
+    // Fetch the next tier down (same season) so newly promoted teams —
+    // who have no match history in this league's CSV yet — still resolve
+    // to something instead of failing to auto-match on the fixtures list.
+    const lowerLeague = LOWER_TIER_MAP[league];
+    if(lowerLeague){
+      try{
+        const lowerUrl = `/api/csv?league=${encodeURIComponent(lowerLeague)}&season=${encodeURIComponent(season)}`;
+        const lowerRes = await fetch(lowerUrl);
+        if(lowerRes.ok){
+          const lowerText = await lowerRes.text();
+          const lowerRows = parseCSV(lowerText).filter(r => r.HomeTeam && r.AwayTeam && r.FTHG !== undefined && r.FTAG !== undefined && r.FTHG !== '' && r.FTAG !== '');
+          const before = new Set(Object.keys(fdTeamStats));
+          buildTeamStatsFromRows(lowerRows, fdTeamStats);
+          Object.keys(fdTeamStats).forEach(name => { if(!before.has(name)) fdPromotedTeams.add(name); });
+        }
+      }catch(e){ /* lower-tier data is a best-effort fallback, ignore failures */ }
+    }
 
     const teamNames = Object.keys(fdTeamStats).sort();
     const homeSel = document.getElementById('fdHomeTeamSelect');
@@ -486,7 +518,10 @@ async function fetchFootballDataCSV(){
 
     document.getElementById('fdTeamPickers').style.display = 'block';
     statusEl.className = 'hint status-ok';
-    statusEl.textContent = `ดึงข้อมูลสำเร็จ — พบ ${validRows.length} แมตช์, ${teamNames.length} ทีม เลือกทีมเหย้า/เยือนด้านล่างได้เลย`;
+    const promotedNote = fdPromotedTeams.size > 0
+      ? ` (รวม ${fdPromotedTeams.size} ทีมเลื่อนชั้นที่ใช้สถิติจากลีกล่างฤดูกาลก่อน)`
+      : '';
+    statusEl.textContent = `ดึงข้อมูลสำเร็จ — พบ ${validRows.length} แมตช์, ${teamNames.length} ทีม${promotedNote} เลือกทีมเหย้า/เยือนด้านล่างได้เลย`;
 
   } catch(err){
     statusEl.className = 'hint status-err';
@@ -622,7 +657,10 @@ async function fetchFixtures(){
       if(!csvTeamNames.length){
         noteHtml = `<div class="fixture-match-note match-warn">กด "ดึงข้อมูลลีกนี้" ด้านบนก่อน เพื่อโหลดสถิติทีม</div>`;
       } else if(homeMatch && awayMatch){
-        noteHtml = `<div class="fixture-match-note match-ok">จับคู่สถิติ: ${homeMatch} vs ${awayMatch}</div>`;
+        const promotedNote = (fdPromotedTeams.has(homeMatch) || fdPromotedTeams.has(awayMatch))
+          ? ` <span class="match-warn">(มีทีมเลื่อนชั้นมา ใช้สถิติฤดูกาลก่อนจากลีกล่าง — ความแม่นยำอาจต่ำกว่าปกติ)</span>`
+          : '';
+        noteHtml = `<div class="fixture-match-note match-ok">จับคู่สถิติ: ${homeMatch} vs ${awayMatch}${promotedNote}</div>`;
       } else {
         noteHtml = `<div class="fixture-match-note match-warn">หาสถิติทีมอัตโนมัติไม่เจอ — เลือกทีมเองด้านบนแทน</div>`;
       }
