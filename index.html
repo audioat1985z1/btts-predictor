@@ -430,6 +430,11 @@ document.getElementById('rho').addEventListener('input', e=>{
 let fdTeamStats = {}; // { teamName: { homeGF:[], homeGA:[], awayGF:[], awayGA:[] } }
 let fdAllGoals = [];
 let fdMatchRows = []; // chronological { date, home, away, fthg, ftag } for the currently loaded top-flight league — used by the backtest
+let fdFit = null; // { attack:{team:val}, defense:{team:val}, homeAdv } fitted via IPF over fdMatchRows
+let fdFitLeagueAvgPerTeam = null;
+
+const RECENCY_HALFLIFE_DAYS = 180; // a match ~6 months old counts half as much as a fresh one
+const IPF_ITERS_LIVE = 40;
 
 function parseFDDate(s){
   // football-data.co.uk uses dd/mm/yy or dd/mm/yyyy
@@ -552,9 +557,13 @@ async function fetchFootballDataCSV(){
     });
 
     // league average goals per game
+    fdFit = null;
+    fdFitLeagueAvgPerTeam = null;
     if(fdAllGoals.length > 0){
       const avgTotal = fdAllGoals.reduce((a,b)=>a+b,0) / fdAllGoals.length;
       document.getElementById('leagueAvg').value = avgTotal.toFixed(2);
+      fdFitLeagueAvgPerTeam = avgTotal / 2;
+      fdFit = fitAttackDefense(fdMatchRows, fdFitLeagueAvgPerTeam, new Date(), RECENCY_HALFLIFE_DAYS, IPF_ITERS_LIVE);
     }
 
     document.getElementById('fdTeamPickers').style.display = 'block';
@@ -590,6 +599,81 @@ function getTeamRates(teamName, statsSource){
     homeGA: avg(s.homeGA) ?? avg(allGA),
     awayGF: avg(s.awayGF) ?? avg(allGF),
     awayGA: avg(s.awayGA) ?? avg(allGA),
+  };
+}
+
+// Proper Dixon-Coles-style attack/defense fit via iterative proportional
+// fitting (IPF) — equivalent to maximum-likelihood Poisson regression on
+// team dummy variables, so unlike a naive "team's own GF / league average"
+// heuristic this accounts for the STRENGTH OF OPPONENTS each team actually
+// faced. Matches are weighted by recency (exponential decay from asOfDate)
+// so recent form counts more than results from months ago.
+//   lambdaHome(i,j) = attack_i * defense_j * homeAdv * leagueAvgPerTeam
+//   lambdaAway(i,j) = attack_j * defense_i * leagueAvgPerTeam
+function fitAttackDefense(matches, leagueAvgPerTeam, asOfDate, halfLifeDays, iters){
+  const teamSet = new Set();
+  matches.forEach(m => { teamSet.add(m.home); teamSet.add(m.away); });
+  const teams = Array.from(teamSet);
+  if(teams.length === 0 || !(leagueAvgPerTeam > 0)) return null;
+
+  const attack = {}, defense = {};
+  teams.forEach(t => { attack[t] = 1; defense[t] = 1; });
+  let homeAdv = 1.3;
+
+  const decay = halfLifeDays ? Math.log(2) / halfLifeDays : 0;
+  const weights = matches.map(m => {
+    if(!decay || !asOfDate || !m.date) return 1;
+    const days = Math.max(0, (asOfDate - m.date) / 86400000);
+    return Math.exp(-decay * days);
+  });
+
+  const L = leagueAvgPerTeam;
+  for(let iter=0; iter<iters; iter++){
+    let hNum=0, hDen=0;
+    matches.forEach((m,idx) => {
+      const w = weights[idx];
+      hNum += w * m.fthg;
+      hDen += w * attack[m.home] * defense[m.away] * L;
+    });
+    if(hDen > 0) homeAdv = hNum/hDen;
+
+    const attNum = {}, attDen = {};
+    teams.forEach(t => { attNum[t]=0; attDen[t]=0; });
+    matches.forEach((m,idx) => {
+      const w = weights[idx];
+      attNum[m.home] += w * m.fthg;
+      attDen[m.home] += w * defense[m.away] * homeAdv * L;
+      attNum[m.away] += w * m.ftag;
+      attDen[m.away] += w * defense[m.home] * L;
+    });
+    teams.forEach(t => { if(attDen[t] > 0) attack[t] = attNum[t]/attDen[t]; });
+
+    const defNum = {}, defDen = {};
+    teams.forEach(t => { defNum[t]=0; defDen[t]=0; });
+    matches.forEach((m,idx) => {
+      const w = weights[idx];
+      defNum[m.home] += w * m.ftag; // goals CONCEDED by home team
+      defDen[m.home] += w * attack[m.away] * L;
+      defNum[m.away] += w * m.fthg; // goals CONCEDED by away team
+      defDen[m.away] += w * attack[m.home] * homeAdv * L;
+    });
+    teams.forEach(t => { if(defDen[t] > 0) defense[t] = defNum[t]/defDen[t]; });
+  }
+
+  return { attack, defense, homeAdv };
+}
+
+// Convert a fitted model's attack/defense/homeAdv into the same
+// {homeGF,homeGA,awayGF,awayGA} shape computeBttsYes() expects, so both the
+// live calculator and the backtest can keep using one shared formula.
+function ratesFromFit(homeTeam, awayTeam, fit, leagueAvgPerTeam){
+  if(!fit || !(homeTeam in fit.attack) || !(awayTeam in fit.attack)) return null;
+  const L = leagueAvgPerTeam;
+  return {
+    homeGF: fit.attack[homeTeam] * fit.homeAdv * L,
+    homeGA: fit.defense[homeTeam] * L,
+    awayGF: fit.attack[awayTeam] * L,
+    awayGA: fit.defense[awayTeam] * L,
   };
 }
 
@@ -630,6 +714,8 @@ function checkArbWarning(oddsYesRaw, oddsNoRaw){
 }
 
 const BACKTEST_MIN_PRIOR_MATCHES = 6; // skip predicting until a team has at least this many matches of history
+const IPF_ITERS_BACKTEST = 25;
+const BACKTEST_REFIT_STRIDE = 5; // re-fit attack/defense every N matches instead of every single one, to keep this fast
 
 function runBacktest(){
   const statusEl = document.getElementById('backtestStatus');
@@ -642,12 +728,13 @@ function runBacktest(){
     return;
   }
 
-  const leagueAvg = parseFloat(document.getElementById('leagueAvg').value);
   const rho = parseFloat(document.getElementById('rho').value);
   const EPS = 0.001;
 
-  const runningStats = {}; // team -> { homeGF:[], homeGA:[], awayGF:[], awayGA:[] }
   const matchCount = {}; // team -> number of matches played so far
+  const matchesSoFar = []; // chronological matches strictly before the one being predicted
+  let goalSum = 0, goalCount = 0; // for a rolling (no-lookahead) league average
+  let fit = null, matchesSinceFit = 0;
 
   let n = 0, correct = 0, sumLogLoss = 0, sumBrier = 0, sumActual = 0;
   const buckets = [
@@ -661,28 +748,37 @@ function runBacktest(){
     const homeReady = (matchCount[m.home] || 0) >= BACKTEST_MIN_PRIOR_MATCHES;
     const awayReady = (matchCount[m.away] || 0) >= BACKTEST_MIN_PRIOR_MATCHES;
 
-    if(homeReady && awayReady){
-      const homeRates = getTeamRates(m.home, runningStats);
-      const awayRates = getTeamRates(m.away, runningStats);
-      let p = computeBttsYes(homeRates.homeGF, homeRates.homeGA, awayRates.awayGF, awayRates.awayGA, leagueAvg, rho);
-      p = Math.min(1-EPS, Math.max(EPS, p));
-      const y = (m.fthg > 0 && m.ftag > 0) ? 1 : 0;
+    if(homeReady && awayReady && goalCount > 0){
+      const L = (goalSum / goalCount) / 2; // rolling league average goals per team — only from matches before this one
+      if(!fit || matchesSinceFit >= BACKTEST_REFIT_STRIDE){
+        fit = fitAttackDefense(matchesSoFar, L, m.date, RECENCY_HALFLIFE_DAYS, IPF_ITERS_BACKTEST);
+        matchesSinceFit = 0;
+      }
+      const rates = fit && (m.home in fit.attack) && (m.away in fit.attack)
+        ? { homeGF: fit.attack[m.home]*fit.homeAdv*L, homeGA: fit.defense[m.home]*L, awayGF: fit.attack[m.away]*L, awayGA: fit.defense[m.away]*L }
+        : null;
 
-      n++;
-      sumActual += y;
-      if((p >= 0.5 ? 1 : 0) === y) correct++;
-      sumLogLoss += -(y*Math.log(p) + (1-y)*Math.log(1-p));
-      sumBrier += (p-y)*(p-y);
+      if(rates){
+        let p = computeBttsYes(rates.homeGF, rates.homeGA, rates.awayGF, rates.awayGA, 2*L, rho);
+        p = Math.min(1-EPS, Math.max(EPS, p));
+        const y = (m.fthg > 0 && m.ftag > 0) ? 1 : 0;
 
-      const bucket = buckets.find(b => p >= b.min && p < b.max) || buckets[buckets.length-1];
-      bucket.n++; bucket.sumP += p; bucket.sumY += y;
+        n++;
+        sumActual += y;
+        if((p >= 0.5 ? 1 : 0) === y) correct++;
+        sumLogLoss += -(y*Math.log(p) + (1-y)*Math.log(1-p));
+        sumBrier += (p-y)*(p-y);
+
+        const bucket = buckets.find(b => p >= b.min && p < b.max) || buckets[buckets.length-1];
+        bucket.n++; bucket.sumP += p; bucket.sumY += y;
+      }
     }
 
     // record this match's actual result for future predictions
-    if(!runningStats[m.home]) runningStats[m.home] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
-    if(!runningStats[m.away]) runningStats[m.away] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
-    runningStats[m.home].homeGF.push(m.fthg); runningStats[m.home].homeGA.push(m.ftag);
-    runningStats[m.away].awayGF.push(m.ftag); runningStats[m.away].awayGA.push(m.fthg);
+    matchesSoFar.push(m);
+    matchesSinceFit++;
+    goalSum += m.fthg + m.ftag;
+    goalCount++;
     matchCount[m.home] = (matchCount[m.home]||0) + 1;
     matchCount[m.away] = (matchCount[m.away]||0) + 1;
   });
@@ -738,7 +834,7 @@ function runBacktest(){
       <tr><th>ช่วง % ที่โมเดลทาย</th><th>จำนวนนัด</th><th>ค่าเฉลี่ยที่โมเดลทาย</th><th>อัตรา BTTS จริง</th></tr>
       ${bucketRows}
     </table>
-    <div class="hint" style="margin-top:10px">คอลัมน์ขวาสองคอลัมน์ควรใกล้เคียงกันในแต่ละแถวถ้าโมเดล calibrate ดี (เช่น นัดที่โมเดลทาย 60%+ ควรเกิด BTTS จริงราวๆ 60%+ ด้วย) — ทั้งหมดนี้ใช้ league average ของทั้งฤดูกาล (ไม่ใช่แบบ rolling ถึงแค่วันนั้น) เพื่อ normalize attack/defense ซึ่งเป็นจุดที่ยังมี lookahead เล็กน้อย ผลจริงอาจแม่นน้อยกว่านี้เล็กน้อยถ้าใช้แบบ real-time</div>
+    <div class="hint" style="margin-top:10px">คอลัมน์ขวาสองคอลัมน์ควรใกล้เคียงกันในแต่ละแถวถ้าโมเดล calibrate ดี (เช่น นัดที่โมเดลทาย 60%+ ควรเกิด BTTS จริงราวๆ 60%+ ด้วย) — แต่ละนัดคำนวณจาก attack/defense ที่ fit ด้วย IPF (เทียบเท่า Dixon-Coles MLE) ถ่วงน้ำหนักตามความใหม่ (ครึ่งชีวิต ${RECENCY_HALFLIFE_DAYS} วัน) และ league average แบบ rolling (เฉพาะนัดก่อนหน้าเท่านั้น) จึงไม่มี lookahead เหลืออยู่แล้ว</div>
   `;
 }
 
@@ -853,6 +949,22 @@ async function fetchFixtures(){
   }
 }
 
+// Prefer the fitted Dixon-Coles model (fdFit) when the team is in it; fall
+// back to the naive per-team average (getTeamRates) otherwise — e.g. a team
+// only known via the lower-tier promoted-team fallback isn't in fdFit since
+// that fit only runs over this league's own matches (fdMatchRows).
+function getBestRatesForSide(teamName, side){
+  if(fdFit && fdFitLeagueAvgPerTeam && (teamName in fdFit.attack)){
+    const L = fdFitLeagueAvgPerTeam;
+    return side === 'home'
+      ? { GF: fdFit.attack[teamName] * fdFit.homeAdv * L, GA: fdFit.defense[teamName] * L }
+      : { GF: fdFit.attack[teamName] * L, GA: fdFit.defense[teamName] * L };
+  }
+  const r = getTeamRates(teamName);
+  if(!r) return null;
+  return side === 'home' ? { GF: r.homeGF, GA: r.homeGA } : { GF: r.awayGF, GA: r.awayGA };
+}
+
 function selectFixture(idx, homeMatch, awayMatch){
   document.querySelectorAll('.fixture-row').forEach(el => el.classList.remove('selected'));
   const row = document.getElementById(`fixture-${idx}`);
@@ -870,13 +982,13 @@ function selectFixture(idx, homeMatch, awayMatch){
     return;
   }
 
-  const homeRates = getTeamRates(homeMatch);
-  const awayRates = getTeamRates(awayMatch);
+  const homeRates = getBestRatesForSide(homeMatch, 'home');
+  const awayRates = getBestRatesForSide(awayMatch, 'away');
   if(!homeRates || !awayRates) return;
-  document.getElementById('homeGF').value = homeRates.homeGF.toFixed(2);
-  document.getElementById('homeGA').value = homeRates.homeGA.toFixed(2);
-  document.getElementById('awayGF').value = awayRates.awayGF.toFixed(2);
-  document.getElementById('awayGA').value = awayRates.awayGA.toFixed(2);
+  document.getElementById('homeGF').value = homeRates.GF.toFixed(2);
+  document.getElementById('homeGA').value = homeRates.GA.toFixed(2);
+  document.getElementById('awayGF').value = awayRates.GF.toFixed(2);
+  document.getElementById('awayGA').value = awayRates.GA.toFixed(2);
   calculate();
 }
 
@@ -892,15 +1004,15 @@ toggleFixturesCard();
 function applyFDTeamSelection(which){
   const sel = document.getElementById(which === 'home' ? 'fdHomeTeamSelect' : 'fdAwayTeamSelect');
   const teamName = sel.value;
-  const rates = teamName ? getTeamRates(teamName) : null;
+  const rates = teamName ? getBestRatesForSide(teamName, which) : null;
   if(!rates) return;
 
   if(which === 'home'){
-    document.getElementById('homeGF').value = rates.homeGF.toFixed(2);
-    document.getElementById('homeGA').value = rates.homeGA.toFixed(2);
+    document.getElementById('homeGF').value = rates.GF.toFixed(2);
+    document.getElementById('homeGA').value = rates.GA.toFixed(2);
   } else {
-    document.getElementById('awayGF').value = rates.awayGF.toFixed(2);
-    document.getElementById('awayGA').value = rates.awayGA.toFixed(2);
+    document.getElementById('awayGF').value = rates.GF.toFixed(2);
+    document.getElementById('awayGA').value = rates.GA.toFixed(2);
   }
   calculate();
 }
