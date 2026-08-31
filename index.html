@@ -535,6 +535,23 @@ function avg(arr){
   return arr.reduce((a,b)=>a+b,0) / arr.length;
 }
 
+// Early in a season a team can have zero HOME (or zero AWAY) matches played
+// yet, which made homeGF/homeGA (or away*) come back null and silently left
+// stale numbers on screen. Fall back to the team's overall (home+away
+// combined) average so the fields always update to something real.
+function getTeamRates(teamName){
+  const s = fdTeamStats[teamName];
+  if(!s) return null;
+  const allGF = s.homeGF.concat(s.awayGF);
+  const allGA = s.homeGA.concat(s.awayGA);
+  return {
+    homeGF: avg(s.homeGF) ?? avg(allGF),
+    homeGA: avg(s.homeGA) ?? avg(allGA),
+    awayGF: avg(s.awayGF) ?? avg(allGF),
+    awayGA: avg(s.awayGA) ?? avg(allGA),
+  };
+}
+
 function renderEdge(side, modelProb, oddsRaw){
   const box = document.getElementById('edgeBox'+side);
   const odds = parseFloat(oddsRaw);
@@ -699,14 +716,13 @@ function selectFixture(idx, homeMatch, awayMatch){
     return;
   }
 
-  const homeStats = fdTeamStats[homeMatch];
-  const awayStats = fdTeamStats[awayMatch];
-  const hgf = avg(homeStats.homeGF), hga = avg(homeStats.homeGA);
-  const agf = avg(awayStats.awayGF), aga = avg(awayStats.awayGA);
-  if(hgf !== null) document.getElementById('homeGF').value = hgf.toFixed(2);
-  if(hga !== null) document.getElementById('homeGA').value = hga.toFixed(2);
-  if(agf !== null) document.getElementById('awayGF').value = agf.toFixed(2);
-  if(aga !== null) document.getElementById('awayGA').value = aga.toFixed(2);
+  const homeRates = getTeamRates(homeMatch);
+  const awayRates = getTeamRates(awayMatch);
+  if(!homeRates || !awayRates) return;
+  document.getElementById('homeGF').value = homeRates.homeGF.toFixed(2);
+  document.getElementById('homeGA').value = homeRates.homeGA.toFixed(2);
+  document.getElementById('awayGF').value = awayRates.awayGF.toFixed(2);
+  document.getElementById('awayGA').value = awayRates.awayGA.toFixed(2);
   calculate();
 }
 
@@ -722,19 +738,15 @@ toggleFixturesCard();
 function applyFDTeamSelection(which){
   const sel = document.getElementById(which === 'home' ? 'fdHomeTeamSelect' : 'fdAwayTeamSelect');
   const teamName = sel.value;
-  if(!teamName || !fdTeamStats[teamName]) return;
-  const stats = fdTeamStats[teamName];
+  const rates = teamName ? getTeamRates(teamName) : null;
+  if(!rates) return;
 
   if(which === 'home'){
-    const gf = avg(stats.homeGF);
-    const ga = avg(stats.homeGA);
-    if(gf !== null) document.getElementById('homeGF').value = gf.toFixed(2);
-    if(ga !== null) document.getElementById('homeGA').value = ga.toFixed(2);
+    document.getElementById('homeGF').value = rates.homeGF.toFixed(2);
+    document.getElementById('homeGA').value = rates.homeGA.toFixed(2);
   } else {
-    const gf = avg(stats.awayGF);
-    const ga = avg(stats.awayGA);
-    if(gf !== null) document.getElementById('awayGF').value = gf.toFixed(2);
-    if(ga !== null) document.getElementById('awayGA').value = ga.toFixed(2);
+    document.getElementById('awayGF').value = rates.awayGF.toFixed(2);
+    document.getElementById('awayGA').value = rates.awayGA.toFixed(2);
   }
   calculate();
 }
