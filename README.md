@@ -1,7 +1,9 @@
-# BTTS Predictor
+# 1X2 Predictor
 
-Both Teams To Score probability calculator (Poisson + Dixon-Coles correlation
-adjustment), with free team-stats pulled from football-data.co.uk.
+Match result (Home win / Draw / Away win) probability calculator, using a
+Dixon-Coles attack/defense model fitted via iterative proportional fitting
+(IPF, equivalent to maximum-likelihood Poisson regression) with recency
+weighting, on free team-stats pulled from football-data.co.uk.
 
 - `index.html` — the frontend (static, no build step).
 - `api/csv.js` — a Vercel serverless function that fetches the season-results

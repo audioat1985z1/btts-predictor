@@ -2,5 +2,5 @@
   "name": "btts-predictor",
   "version": "1.0.0",
   "private": true,
-  "description": "BTTS (Both Teams To Score) predictor using Poisson + Dixon-Coles, with a Vercel serverless proxy for football-data.co.uk to avoid browser CORS."
+  "description": "1X2 (match result) predictor using a Dixon-Coles attack/defense model, with a Vercel serverless proxy for football-data.co.uk to avoid browser CORS."
 }

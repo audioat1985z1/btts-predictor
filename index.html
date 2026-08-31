@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BTTS Predictor</title>
+<title>1X2 Predictor</title>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -102,6 +102,8 @@
   .status-ok{color:var(--green);}
   .status-err{color:var(--red);}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  @media (max-width:640px){ .row3{grid-template-columns:1fr;} }
   .slider-row{margin-top:14px;}
   input[type=range]{
     width:100%;
@@ -126,10 +128,11 @@
   .results{margin-top:20px;}
   .prob-cards{
     display:grid;
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:1fr 1fr 1fr;
     gap:14px;
     margin-bottom:16px;
   }
+  @media (max-width:640px){ .prob-cards{grid-template-columns:1fr;} }
   .prob-card{
     background:var(--navy-800);
     border:1px solid var(--navy-600);
@@ -137,12 +140,14 @@
     padding:20px;
     text-align:center;
   }
-  .prob-card.yes{border-color:rgba(95,191,138,.4);}
-  .prob-card.no{border-color:rgba(217,105,95,.4);}
+  .prob-card.home{border-color:rgba(95,191,138,.4);}
+  .prob-card.draw{border-color:rgba(201,164,99,.4);}
+  .prob-card.away{border-color:rgba(217,105,95,.4);}
   .prob-label{font-size:12.5px;color:var(--text-dim);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase;}
   .prob-num{font-family:'Kanit',sans-serif;font-weight:700;font-size:34px;}
-  .prob-card.yes .prob-num{color:var(--green);}
-  .prob-card.no .prob-num{color:var(--red);}
+  .prob-card.home .prob-num{color:var(--green);}
+  .prob-card.draw .prob-num{color:var(--gold-soft);}
+  .prob-card.away .prob-num{color:var(--red);}
   .prob-sub{font-size:11.5px;color:var(--text-dim);margin-top:4px;}
   .compare-box{
     background:var(--navy-800);
@@ -254,8 +259,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>BTTS Predictor</h1>
-  <div class="sub">โมเดลทาย Both Teams To Score ด้วย Poisson + Dixon-Coles correlation adjustment</div>
+  <h1>1X2 Predictor</h1>
+  <div class="sub">โมเดลทายผลแพ้ชนะเสมอ (1X2) ด้วย Poisson + Dixon-Coles correlation adjustment</div>
 
   <div class="card" style="margin-bottom:16px">
     <h2><span class="dot"></span> ดึงข้อมูลฟรีจาก Football-Data.co.uk (ผ่าน backend proxy ของเว็บนี้ — ไม่ต้องมี API key)</h2>
@@ -357,60 +362,74 @@
         <div class="hint">ค่าลบ = ลดโอกาสสกอร์เตี้ย (0-0,1-0,0-1,1-1) เล็กน้อยเทียบกับ independent Poisson — ค่าทั่วไปจาก fit ข้อมูลจริงอยู่ราว -0.1 ถึง -0.2</div>
       </div>
 
-      <button class="calc" onclick="calculate()">คำนวณ BTTS</button>
+      <button class="calc" onclick="calculate()">คำนวณผล 1X2</button>
     </div>
   </div>
 
   <div class="card" style="margin-bottom:16px">
     <h2><span class="dot"></span> เทียบกับราคาตลาด (ถ้ามี)</h2>
-    <div class="row2">
+    <div class="row3">
       <div>
-        <label>Market odds BTTS Yes (decimal)</label>
-        <input type="number" id="marketOdds" step="0.01" placeholder="เช่น 1.85">
+        <label>ราคาชนะเหย้า (Home, decimal)</label>
+        <input type="number" id="marketOddsHome" step="0.01" placeholder="เช่น 1.85">
       </div>
       <div>
-        <label>Market odds BTTS No (decimal)</label>
-        <input type="number" id="marketOddsNo" step="0.01" placeholder="เช่น 1.95">
+        <label>ราคาเสมอ (Draw, decimal)</label>
+        <input type="number" id="marketOddsDraw" step="0.01" placeholder="เช่น 3.40">
+      </div>
+      <div>
+        <label>ราคาชนะเยือน (Away, decimal)</label>
+        <input type="number" id="marketOddsAway" step="0.01" placeholder="เช่น 4.20">
       </div>
     </div>
-    <div class="hint">ใส่ราคาจากเว็บพนัน/บุ๊คที่คุณดูอยู่ ฝั่งไหนก็ได้หรือทั้งสองฝั่ง เพื่อเทียบ probability ของโมเดลกับราคาตลาดหา edge แต่ละฝั่งแยกกัน (เว้นว่างได้ถ้าไม่ต้องการ)</div>
+    <div class="hint">ใส่ราคาจากเว็บพนัน/บุ๊คที่คุณดูอยู่ ฝั่งไหนก็ได้หรือครบทั้งสามฝั่ง เพื่อเทียบ probability ของโมเดลกับราคาตลาดหา edge แต่ละฝั่งแยกกัน (เว้นว่างได้ถ้าไม่ต้องการ)</div>
   </div>
 
   <div class="results" id="results" style="display:none">
     <div class="prob-cards">
-      <div class="prob-card yes">
-        <div class="prob-label">BTTS Yes</div>
-        <div class="prob-num" id="yesProb">--%</div>
-        <div class="prob-sub" id="yesFair">fair odds --</div>
+      <div class="prob-card home">
+        <div class="prob-label">ชนะเหย้า</div>
+        <div class="prob-num" id="homeWinProb">--%</div>
+        <div class="prob-sub" id="homeWinFair">fair odds --</div>
       </div>
-      <div class="prob-card no">
-        <div class="prob-label">BTTS No</div>
-        <div class="prob-num" id="noProb">--%</div>
-        <div class="prob-sub" id="noFair">fair odds --</div>
+      <div class="prob-card draw">
+        <div class="prob-label">เสมอ</div>
+        <div class="prob-num" id="drawProb">--%</div>
+        <div class="prob-sub" id="drawFair">fair odds --</div>
+      </div>
+      <div class="prob-card away">
+        <div class="prob-label">ชนะเยือน</div>
+        <div class="prob-num" id="awayWinProb">--%</div>
+        <div class="prob-sub" id="awayWinFair">fair odds --</div>
       </div>
     </div>
 
-    <div class="compare-box" id="edgeBoxYes" style="display:none">
-      <div class="compare-item">BTTS Yes — Model prob<b id="edgeModelProbYes">--</b></div>
-      <div class="compare-item">Market implied<b id="edgeMarketProbYes">--</b></div>
-      <div class="compare-item">Edge (EV)<b id="edgeValYes">--</b></div>
+    <div class="compare-box" id="edgeBoxHome" style="display:none">
+      <div class="compare-item">ชนะเหย้า — Model prob<b id="edgeModelProbHome">--</b></div>
+      <div class="compare-item">Market implied<b id="edgeMarketProbHome">--</b></div>
+      <div class="compare-item">Edge (EV)<b id="edgeValHome">--</b></div>
     </div>
-    <div class="compare-box" id="edgeBoxNo" style="display:none">
-      <div class="compare-item">BTTS No — Model prob<b id="edgeModelProbNo">--</b></div>
-      <div class="compare-item">Market implied<b id="edgeMarketProbNo">--</b></div>
-      <div class="compare-item">Edge (EV)<b id="edgeValNo">--</b></div>
+    <div class="compare-box" id="edgeBoxDraw" style="display:none">
+      <div class="compare-item">เสมอ — Model prob<b id="edgeModelProbDraw">--</b></div>
+      <div class="compare-item">Market implied<b id="edgeMarketProbDraw">--</b></div>
+      <div class="compare-item">Edge (EV)<b id="edgeValDraw">--</b></div>
+    </div>
+    <div class="compare-box" id="edgeBoxAway" style="display:none">
+      <div class="compare-item">ชนะเยือน — Model prob<b id="edgeModelProbAway">--</b></div>
+      <div class="compare-item">Market implied<b id="edgeMarketProbAway">--</b></div>
+      <div class="compare-item">Edge (EV)<b id="edgeValAway">--</b></div>
     </div>
 
     <div class="arb-alert" id="arbWarning" style="display:none"></div>
 
     <div class="note">
-      โมเดลนี้คำนวณ λ (expected goals) จาก attack/defense rating เทียบกับค่าเฉลี่ยลีก จากนั้นสร้าง scoreline matrix ด้วย Poisson แล้วปรับด้วย Dixon-Coles τ correction เพื่อแก้ correlation ในสกอร์ต่ำ (0-0, 1-0, 0-1, 1-1) ก่อนรวมความน่าจะเป็นของทุกช่องที่ทั้งสองทีมยิงได้ ≥1 ประตู เป็น P(BTTS Yes)
+      โมเดลนี้คำนวณ λ (expected goals) จาก attack/defense rating เทียบกับค่าเฉลี่ยลีก จากนั้นสร้าง scoreline matrix ด้วย Poisson แล้วปรับด้วย Dixon-Coles τ correction เพื่อแก้ correlation ในสกอร์ต่ำ (0-0, 1-0, 0-1, 1-1) ก่อนรวมความน่าจะเป็นตามเส้นทแยงมุมของ matrix เป็น P(ชนะเหย้า) / P(เสมอ) / P(ชนะเยือน)
     </div>
   </div>
 
   <div class="card" style="margin-top:16px">
     <h2><span class="dot"></span> ทดสอบย้อนหลัง (Backtest)</h2>
-    <div class="hint">รันโมเดลย้อนหลังทีละนัดตามลำดับวันที่ในฤดูกาลที่ดึงข้อมูลไว้ด้านบน (ต้องกด "ดึงข้อมูลลีกนี้" ก่อน) — แต่ละนัดใช้เฉพาะสถิติของทีมนั้น <b>ก่อนนัดนั้น</b> เท่านั้นในการทาย (ไม่แอบใช้ผลนัดนั้นเอง หรือผลในอนาคตมาช่วยทาย) แล้วเทียบกับผลจริงว่า BTTS เกิดขึ้นไหม</div>
+    <div class="hint">รันโมเดลย้อนหลังทีละนัดตามลำดับวันที่ในฤดูกาลที่ดึงข้อมูลไว้ด้านบน (ต้องกด "ดึงข้อมูลลีกนี้" ก่อน) — แต่ละนัดใช้เฉพาะสถิติของทีมนั้น <b>ก่อนนัดนั้น</b> เท่านั้นในการทาย (ไม่แอบใช้ผลนัดนั้นเอง หรือผลในอนาคตมาช่วยทาย) แล้วเทียบกับผลจริงว่าทายฝั่งที่ชนะ/เสมอถูกไหม</div>
     <button class="calc" onclick="runBacktest()">รันแบ็คเทสต์ฤดูกาลนี้</button>
     <div id="backtestStatus" class="hint" style="margin-top:10px"></div>
     <div id="backtestResults"></div>
@@ -423,7 +442,7 @@ document.getElementById('rho').addEventListener('input', e=>{
   calculate();
 });
 
-['homeGF','homeGA','awayGF','awayGA','leagueAvg','marketOdds','marketOddsNo'].forEach(id=>{
+['homeGF','homeGA','awayGF','awayGA','leagueAvg','marketOddsHome','marketOddsDraw','marketOddsAway'].forEach(id=>{
   document.getElementById(id).addEventListener('input', calculate);
 });
 
@@ -663,20 +682,6 @@ function fitAttackDefense(matches, leagueAvgPerTeam, asOfDate, halfLifeDays, ite
   return { attack, defense, homeAdv };
 }
 
-// Convert a fitted model's attack/defense/homeAdv into the same
-// {homeGF,homeGA,awayGF,awayGA} shape computeBttsYes() expects, so both the
-// live calculator and the backtest can keep using one shared formula.
-function ratesFromFit(homeTeam, awayTeam, fit, leagueAvgPerTeam){
-  if(!fit || !(homeTeam in fit.attack) || !(awayTeam in fit.attack)) return null;
-  const L = leagueAvgPerTeam;
-  return {
-    homeGF: fit.attack[homeTeam] * fit.homeAdv * L,
-    homeGA: fit.defense[homeTeam] * L,
-    awayGF: fit.attack[awayTeam] * L,
-    awayGA: fit.defense[awayTeam] * L,
-  };
-}
-
 function renderEdge(side, modelProb, oddsRaw){
   const box = document.getElementById('edgeBox'+side);
   const odds = parseFloat(oddsRaw);
@@ -694,20 +699,19 @@ function renderEdge(side, modelProb, oddsRaw){
   edgeEl.className = ev>=0 ? 'edge-pos':'edge-neg';
 }
 
-function checkArbWarning(oddsYesRaw, oddsNoRaw){
+function checkArbWarning(oddsHomeRaw, oddsDrawRaw, oddsAwayRaw){
   const box = document.getElementById('arbWarning');
-  const oddsYes = parseFloat(oddsYesRaw);
-  const oddsNo = parseFloat(oddsNoRaw);
-  if(!oddsYesRaw || !oddsNoRaw || !(oddsYes > 1) || !(oddsNo > 1)){
+  const oH = parseFloat(oddsHomeRaw), oD = parseFloat(oddsDrawRaw), oA = parseFloat(oddsAwayRaw);
+  if(!oddsHomeRaw || !oddsDrawRaw || !oddsAwayRaw || !(oH > 1) || !(oD > 1) || !(oA > 1)){
     box.style.display = 'none';
     return;
   }
-  const impliedSum = (1/oddsYes + 1/oddsNo) * 100;
+  const impliedSum = (1/oH + 1/oD + 1/oA) * 100;
   if(impliedSum < 100){
     box.style.display = 'block';
-    box.innerHTML = `⚠ รวม implied probability ของราคา Yes+No = <b>${impliedSum.toFixed(1)}%</b> (ต่ำกว่า 100%) — `
-      + `ถ้าราคาทั้งสองมาจาก<b>บุ๊คเดียวกัน</b> ให้เช็คว่ากรอกราคาถูกต้องหรือไม่ก่อน อาจเป็นค่าที่พิมพ์ผิด `
-      + `แต่ถ้ามาจาก<b>คนละบุ๊ค</b> (line shopping) นี่คือสัญญาณ arbitrage — เดิมพันแบ่งสัดส่วนทั้งสองฝั่งจะได้กำไรแน่นอนไม่ว่าผลจะออกอะไร โดยไม่ต้องพึ่งความแม่นของโมเดลนี้เลย`;
+    box.innerHTML = `⚠ รวม implied probability ของราคา Home+Draw+Away = <b>${impliedSum.toFixed(1)}%</b> (ต่ำกว่า 100%) — `
+      + `ถ้าราคาทั้งสามมาจาก<b>บุ๊คเดียวกัน</b> ให้เช็คว่ากรอกราคาถูกต้องหรือไม่ก่อน อาจเป็นค่าที่พิมพ์ผิด `
+      + `แต่ถ้ามาจาก<b>คนละบุ๊ค</b> (line shopping) นี่คือสัญญาณ arbitrage — เดิมพันแบ่งสัดส่วนทั้งสามฝั่งจะได้กำไรแน่นอนไม่ว่าผลจะออกอะไร โดยไม่ต้องพึ่งความแม่นของโมเดลนี้เลย`;
   } else {
     box.style.display = 'none';
   }
@@ -736,7 +740,8 @@ function runBacktest(){
   let goalSum = 0, goalCount = 0; // for a rolling (no-lookahead) league average
   let fit = null, matchesSinceFit = 0;
 
-  let n = 0, correct = 0, sumLogLoss = 0, sumBrier = 0, sumActual = 0;
+  let n = 0, correct = 0, sumLogLoss = 0, sumBrier = 0;
+  const outcomeCounts = { H: 0, D: 0, A: 0 };
   const buckets = [
     { label: '<40%', min: 0, max: 0.4, n: 0, sumP: 0, sumY: 0 },
     { label: '40-50%', min: 0.4, max: 0.5, n: 0, sumP: 0, sumY: 0 },
@@ -759,18 +764,24 @@ function runBacktest(){
         : null;
 
       if(rates){
-        let p = computeBttsYes(rates.homeGF, rates.homeGA, rates.awayGF, rates.awayGA, 2*L, rho);
-        p = Math.min(1-EPS, Math.max(EPS, p));
-        const y = (m.fthg > 0 && m.ftag > 0) ? 1 : 0;
+        const probs = computeMatchProbs(rates.homeGF, rates.homeGA, rates.awayGF, rates.awayGA, 2*L, rho);
+        const pH = Math.min(1-EPS, Math.max(EPS, probs.homeWin));
+        const pD = Math.min(1-EPS, Math.max(EPS, probs.draw));
+        const pA = Math.min(1-EPS, Math.max(EPS, probs.awayWin));
+        const actual = m.fthg > m.ftag ? 'H' : (m.fthg === m.ftag ? 'D' : 'A');
+        outcomeCounts[actual]++;
 
         n++;
-        sumActual += y;
-        if((p >= 0.5 ? 1 : 0) === y) correct++;
-        sumLogLoss += -(y*Math.log(p) + (1-y)*Math.log(1-p));
-        sumBrier += (p-y)*(p-y);
+        const pActual = actual==='H' ? pH : (actual==='D' ? pD : pA);
+        sumLogLoss += -Math.log(pActual);
+        sumBrier += (pH - (actual==='H'?1:0))**2 + (pD - (actual==='D'?1:0))**2 + (pA - (actual==='A'?1:0))**2;
 
-        const bucket = buckets.find(b => p >= b.min && p < b.max) || buckets[buckets.length-1];
-        bucket.n++; bucket.sumP += p; bucket.sumY += y;
+        const top = (pH>=pD && pH>=pA) ? 'H' : (pD>=pA ? 'D' : 'A');
+        const pTop = top==='H' ? pH : (top==='D' ? pD : pA);
+        if(top === actual) correct++;
+
+        const bucket = buckets.find(b => pTop >= b.min && pTop < b.max) || buckets[buckets.length-1];
+        bucket.n++; bucket.sumP += pTop; bucket.sumY += (top===actual ? 1 : 0);
       }
     }
 
@@ -792,14 +803,18 @@ function runBacktest(){
   const accuracy = correct / n;
   const avgLogLoss = sumLogLoss / n;
   const avgBrier = sumBrier / n;
-  const baseRate = sumActual / n;
-  const baseRateClamped = Math.min(1-EPS, Math.max(EPS, baseRate));
-  const baseAccuracy = Math.max(baseRate, 1-baseRate);
-  const baseLogLoss = -(baseRateClamped*Math.log(baseRateClamped) + (1-baseRateClamped)*Math.log(1-baseRateClamped));
-  const baseBrier = baseRate * (1-baseRate);
+  const rateH = outcomeCounts.H / n, rateD = outcomeCounts.D / n, rateA = outcomeCounts.A / n;
+  const baseAccuracy = Math.max(rateH, rateD, rateA);
+  const domLabel = rateH >= rateD && rateH >= rateA ? 'ชนะเหย้า' : (rateD >= rateA ? 'เสมอ' : 'ชนะเยือน');
+  const baseLogLoss = -(
+    rateH * Math.log(Math.max(rateH, EPS)) +
+    rateD * Math.log(Math.max(rateD, EPS)) +
+    rateA * Math.log(Math.max(rateA, EPS))
+  );
+  const baseBrier = rateH*(1-rateH) + rateD*(1-rateD) + rateA*(1-rateA);
 
   statusEl.className = 'hint status-ok';
-  statusEl.textContent = `ทดสอบแล้ว ${n} นัด (ข้าม ${fdMatchRows.length - n} นัดแรกๆ ที่ทีมยังมีประวัติไม่พอ) — baseline คือการเดา "อัตรา BTTS เฉลี่ยของฤดูกาลนี้เสมอ" (${(baseRate*100).toFixed(1)}%) โดยไม่ดูทีมเลย`;
+  statusEl.textContent = `ทดสอบแล้ว ${n} นัด (ข้าม ${fdMatchRows.length - n} นัดแรกๆ ที่ทีมยังมีประวัติไม่พอ) — baseline คือการเดา "${domLabel}เสมอทุกนัด" (${(baseAccuracy*100).toFixed(1)}%) โดยไม่ดูทีมเลย`;
 
   let bucketRows = '';
   buckets.forEach(b => {
@@ -810,9 +825,9 @@ function runBacktest(){
   resultsEl.innerHTML = `
     <div class="backtest-metrics">
       <div class="backtest-metric">
-        <div class="m-label">ความแม่นยำ (threshold 50%)</div>
+        <div class="m-label">ความแม่นยำ (เลือกฝั่งที่มั่นใจสุด)</div>
         <div class="m-val">${(accuracy*100).toFixed(1)}%</div>
-        <div class="m-base">baseline (เดาเสียงข้างมากเสมอ): ${(baseAccuracy*100).toFixed(1)}%</div>
+        <div class="m-base">baseline (เดา "${domLabel}" เสมอ): ${(baseAccuracy*100).toFixed(1)}%</div>
       </div>
       <div class="backtest-metric">
         <div class="m-label">Log-loss (ยิ่งต่ำยิ่งดี)</div>
@@ -825,16 +840,16 @@ function runBacktest(){
         <div class="m-base">baseline: ${baseBrier.toFixed(3)}</div>
       </div>
       <div class="backtest-metric">
-        <div class="m-label">อัตรา BTTS จริงของฤดูกาลนี้</div>
-        <div class="m-val">${(baseRate*100).toFixed(1)}%</div>
+        <div class="m-label">สัดส่วนผลจริงของฤดูกาลนี้</div>
+        <div class="m-val" style="font-size:15px">H ${(rateH*100).toFixed(0)}% / D ${(rateD*100).toFixed(0)}% / A ${(rateA*100).toFixed(0)}%</div>
         <div class="m-base">จาก ${n} นัดที่ทดสอบ</div>
       </div>
     </div>
     <table class="calib">
-      <tr><th>ช่วง % ที่โมเดลทาย</th><th>จำนวนนัด</th><th>ค่าเฉลี่ยที่โมเดลทาย</th><th>อัตรา BTTS จริง</th></tr>
+      <tr><th>ความมั่นใจของโมเดล (ฝั่งที่เลือก)</th><th>จำนวนนัด</th><th>ความมั่นใจเฉลี่ย</th><th>อัตราที่ทายถูกจริง</th></tr>
       ${bucketRows}
     </table>
-    <div class="hint" style="margin-top:10px">คอลัมน์ขวาสองคอลัมน์ควรใกล้เคียงกันในแต่ละแถวถ้าโมเดล calibrate ดี (เช่น นัดที่โมเดลทาย 60%+ ควรเกิด BTTS จริงราวๆ 60%+ ด้วย) — แต่ละนัดคำนวณจาก attack/defense ที่ fit ด้วย IPF (เทียบเท่า Dixon-Coles MLE) ถ่วงน้ำหนักตามความใหม่ (ครึ่งชีวิต ${RECENCY_HALFLIFE_DAYS} วัน) และ league average แบบ rolling (เฉพาะนัดก่อนหน้าเท่านั้น) จึงไม่มี lookahead เหลืออยู่แล้ว</div>
+    <div class="hint" style="margin-top:10px">คอลัมน์ขวาสองคอลัมน์ควรใกล้เคียงกันในแต่ละแถวถ้าโมเดล calibrate ดี (เช่น นัดที่โมเดลมั่นใจ 60%+ ควรทายถูกจริงราวๆ 60%+ ด้วย) — แต่ละนัดคำนวณจาก attack/defense ที่ fit ด้วย IPF (เทียบเท่า Dixon-Coles MLE) ถ่วงน้ำหนักตามความใหม่ (ครึ่งชีวิต ${RECENCY_HALFLIFE_DAYS} วัน) และ league average แบบ rolling (เฉพาะนัดก่อนหน้าเท่านั้น) จึงไม่มี lookahead เหลืออยู่แล้ว</div>
   `;
 }
 
@@ -971,12 +986,9 @@ function selectFixture(idx, homeMatch, awayMatch){
   if(row) row.classList.add('selected');
 
   if(!homeMatch || !awayMatch){
-    document.getElementById('yesProb').textContent = 'N/A';
-    document.getElementById('noProb').textContent = 'N/A';
-    document.getElementById('yesFair').textContent = 'fair odds --';
-    document.getElementById('noFair').textContent = 'fair odds --';
-    document.getElementById('edgeBoxYes').style.display = 'none';
-    document.getElementById('edgeBoxNo').style.display = 'none';
+    ['homeWinProb','drawProb','awayWinProb'].forEach(id => document.getElementById(id).textContent = 'N/A');
+    ['homeWinFair','drawFair','awayWinFair'].forEach(id => document.getElementById(id).textContent = 'fair odds --');
+    ['edgeBoxHome','edgeBoxDraw','edgeBoxAway'].forEach(id => document.getElementById(id).style.display = 'none');
     document.getElementById('arbWarning').style.display = 'none';
     document.getElementById('results').style.display = 'block';
     return;
@@ -1033,10 +1045,11 @@ function tau(x,y,lh,la,rho){
 }
 
 // Core model: attack/defense ratings -> expected goals -> Poisson + Dixon-Coles
-// scoreline matrix -> P(BTTS Yes). Shared by the live calculator and the
-// backtest, so a backtest result always reflects exactly what the live
-// calculator would have shown.
-function computeBttsYes(homeGF, homeGA, awayGF, awayGA, leagueAvg, rho){
+// scoreline matrix -> P(home win) / P(draw) / P(away win), by summing below/on/
+// above the matrix diagonal. Shared by the live calculator and the backtest,
+// so a backtest result always reflects exactly what the live calculator
+// would have shown.
+function computeMatchProbs(homeGF, homeGA, awayGF, awayGA, leagueAvg, rho){
   const leagueAvgPerTeam = leagueAvg / 2;
   const homeAttack = homeGF / leagueAvgPerTeam;
   const homeDefense = homeGA / leagueAvgPerTeam;
@@ -1047,17 +1060,18 @@ function computeBttsYes(homeGF, homeGA, awayGF, awayGA, leagueAvg, rho){
   const lambdaAway = awayAttack * homeDefense * leagueAvgPerTeam;
 
   const maxGoals = 8;
-  let total = 0;
-  let bttsYesRaw = 0;
+  let total = 0, homeWinRaw = 0, drawRaw = 0, awayWinRaw = 0;
   for(let x=0;x<=maxGoals;x++){
     for(let y=0;y<=maxGoals;y++){
       let p = poissonP(x, lambdaHome) * poissonP(y, lambdaAway) * tau(x,y,lambdaHome,lambdaAway,rho);
       if(p<0) p=0;
       total += p;
-      if(x>=1 && y>=1) bttsYesRaw += p;
+      if(x>y) homeWinRaw += p;
+      else if(x===y) drawRaw += p;
+      else awayWinRaw += p;
     }
   }
-  return bttsYesRaw / total;
+  return { homeWin: homeWinRaw/total, draw: drawRaw/total, awayWin: awayWinRaw/total };
 }
 
 function calculate(){
@@ -1067,20 +1081,23 @@ function calculate(){
   const awayGA = parseFloat(document.getElementById('awayGA').value);
   const leagueAvg = parseFloat(document.getElementById('leagueAvg').value);
   const rho = parseFloat(document.getElementById('rho').value);
-  const marketOddsRaw = document.getElementById('marketOdds').value;
-  const marketOddsNoRaw = document.getElementById('marketOddsNo').value;
+  const marketOddsHomeRaw = document.getElementById('marketOddsHome').value;
+  const marketOddsDrawRaw = document.getElementById('marketOddsDraw').value;
+  const marketOddsAwayRaw = document.getElementById('marketOddsAway').value;
 
-  const bttsYes = computeBttsYes(homeGF, homeGA, awayGF, awayGA, leagueAvg, rho);
-  const bttsNo = 1 - bttsYes;
+  const probs = computeMatchProbs(homeGF, homeGA, awayGF, awayGA, leagueAvg, rho);
 
-  document.getElementById('yesProb').textContent = (bttsYes*100).toFixed(1)+'%';
-  document.getElementById('noProb').textContent = (bttsNo*100).toFixed(1)+'%';
-  document.getElementById('yesFair').textContent = 'fair odds ' + (1/bttsYes).toFixed(2);
-  document.getElementById('noFair').textContent = 'fair odds ' + (1/bttsNo).toFixed(2);
+  document.getElementById('homeWinProb').textContent = (probs.homeWin*100).toFixed(1)+'%';
+  document.getElementById('drawProb').textContent = (probs.draw*100).toFixed(1)+'%';
+  document.getElementById('awayWinProb').textContent = (probs.awayWin*100).toFixed(1)+'%';
+  document.getElementById('homeWinFair').textContent = 'fair odds ' + (1/probs.homeWin).toFixed(2);
+  document.getElementById('drawFair').textContent = 'fair odds ' + (1/probs.draw).toFixed(2);
+  document.getElementById('awayWinFair').textContent = 'fair odds ' + (1/probs.awayWin).toFixed(2);
 
-  renderEdge('Yes', bttsYes, marketOddsRaw);
-  renderEdge('No', bttsNo, marketOddsNoRaw);
-  checkArbWarning(marketOddsRaw, marketOddsNoRaw);
+  renderEdge('Home', probs.homeWin, marketOddsHomeRaw);
+  renderEdge('Draw', probs.draw, marketOddsDrawRaw);
+  renderEdge('Away', probs.awayWin, marketOddsAwayRaw);
+  checkArbWarning(marketOddsHomeRaw, marketOddsDrawRaw, marketOddsAwayRaw);
 
   document.getElementById('results').style.display = 'block';
 }
