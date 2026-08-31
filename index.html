@@ -222,6 +222,24 @@
   .fixture-match-note{font-size:11px;margin-top:2px;}
   .match-ok{color:var(--green);}
   .match-warn{color:var(--gold-soft);}
+  .backtest-metrics{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    margin-top:14px;
+  }
+  .backtest-metric{
+    background:var(--navy-700);
+    border:1px solid var(--navy-600);
+    border-radius:10px;
+    padding:12px 14px;
+  }
+  .backtest-metric .m-label{font-size:11.5px;color:var(--text-dim);}
+  .backtest-metric .m-val{font-family:'Kanit',sans-serif;font-weight:600;font-size:19px;color:var(--gold-soft);margin-top:2px;}
+  .backtest-metric .m-base{font-size:11px;color:var(--text-dim);margin-top:2px;}
+  table.calib{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:14px;}
+  table.calib th, table.calib td{padding:7px 8px;text-align:center;border-bottom:1px solid var(--navy-700);}
+  table.calib th{color:var(--text-dim);font-weight:500;}
   .arb-alert{
     background:rgba(201,164,99,.12);
     border:1px solid var(--gold);
@@ -389,6 +407,14 @@
       โมเดลนี้คำนวณ λ (expected goals) จาก attack/defense rating เทียบกับค่าเฉลี่ยลีก จากนั้นสร้าง scoreline matrix ด้วย Poisson แล้วปรับด้วย Dixon-Coles τ correction เพื่อแก้ correlation ในสกอร์ต่ำ (0-0, 1-0, 0-1, 1-1) ก่อนรวมความน่าจะเป็นของทุกช่องที่ทั้งสองทีมยิงได้ ≥1 ประตู เป็น P(BTTS Yes)
     </div>
   </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2><span class="dot"></span> ทดสอบย้อนหลัง (Backtest)</h2>
+    <div class="hint">รันโมเดลย้อนหลังทีละนัดตามลำดับวันที่ในฤดูกาลที่ดึงข้อมูลไว้ด้านบน (ต้องกด "ดึงข้อมูลลีกนี้" ก่อน) — แต่ละนัดใช้เฉพาะสถิติของทีมนั้น <b>ก่อนนัดนั้น</b> เท่านั้นในการทาย (ไม่แอบใช้ผลนัดนั้นเอง หรือผลในอนาคตมาช่วยทาย) แล้วเทียบกับผลจริงว่า BTTS เกิดขึ้นไหม</div>
+    <button class="calc" onclick="runBacktest()">รันแบ็คเทสต์ฤดูกาลนี้</button>
+    <div id="backtestStatus" class="hint" style="margin-top:10px"></div>
+    <div id="backtestResults"></div>
+  </div>
 </div>
 
 <script>
@@ -403,6 +429,17 @@ document.getElementById('rho').addEventListener('input', e=>{
 
 let fdTeamStats = {}; // { teamName: { homeGF:[], homeGA:[], awayGF:[], awayGA:[] } }
 let fdAllGoals = [];
+let fdMatchRows = []; // chronological { date, home, away, fthg, ftag } for the currently loaded top-flight league — used by the backtest
+
+function parseFDDate(s){
+  // football-data.co.uk uses dd/mm/yy or dd/mm/yyyy
+  const parts = (s||'').split('/');
+  if(parts.length !== 3) return null;
+  let [d, m, y] = parts.map(p => parseInt(p, 10));
+  if(y < 100) y += 2000;
+  const dt = new Date(Date.UTC(y, m-1, d));
+  return isNaN(dt.getTime()) ? null : dt;
+}
 
 // England/Germany/Spain/Italy/France: map top flight -> next tier down,
 // so a team newly promoted this season (with no history in the top flight
@@ -475,10 +512,14 @@ async function fetchFootballDataCSV(){
     fdPromotedTeams = new Set();
 
     buildTeamStatsFromRows(validRows, fdTeamStats);
+    fdMatchRows = [];
     validRows.forEach(r => {
       const fthg = parseInt(r.FTHG, 10), ftag = parseInt(r.FTAG, 10);
-      if(!isNaN(fthg) && !isNaN(ftag)) fdAllGoals.push(fthg + ftag);
+      if(isNaN(fthg) || isNaN(ftag)) return;
+      fdAllGoals.push(fthg + ftag);
+      fdMatchRows.push({ date: parseFDDate(r.Date), home: r.HomeTeam.trim(), away: r.AwayTeam.trim(), fthg, ftag });
     });
+    fdMatchRows.sort((a,b) => (a.date?.getTime()||0) - (b.date?.getTime()||0));
 
     // Fetch the next tier down (same season) so newly promoted teams —
     // who have no match history in this league's CSV yet — still resolve
@@ -539,8 +580,8 @@ function avg(arr){
 // yet, which made homeGF/homeGA (or away*) come back null and silently left
 // stale numbers on screen. Fall back to the team's overall (home+away
 // combined) average so the fields always update to something real.
-function getTeamRates(teamName){
-  const s = fdTeamStats[teamName];
+function getTeamRates(teamName, statsSource){
+  const s = (statsSource || fdTeamStats)[teamName];
   if(!s) return null;
   const allGF = s.homeGF.concat(s.awayGF);
   const allGA = s.homeGA.concat(s.awayGA);
@@ -586,6 +627,119 @@ function checkArbWarning(oddsYesRaw, oddsNoRaw){
   } else {
     box.style.display = 'none';
   }
+}
+
+const BACKTEST_MIN_PRIOR_MATCHES = 3; // skip predicting until a team has at least this many matches of history
+
+function runBacktest(){
+  const statusEl = document.getElementById('backtestStatus');
+  const resultsEl = document.getElementById('backtestResults');
+  resultsEl.innerHTML = '';
+
+  if(fdMatchRows.length === 0){
+    statusEl.className = 'hint status-err';
+    statusEl.textContent = 'กด "ดึงข้อมูลลีกนี้" ด้านบนก่อน เพื่อโหลดผลบอลของฤดูกาลที่จะทดสอบ';
+    return;
+  }
+
+  const leagueAvg = parseFloat(document.getElementById('leagueAvg').value);
+  const rho = parseFloat(document.getElementById('rho').value);
+  const EPS = 0.001;
+
+  const runningStats = {}; // team -> { homeGF:[], homeGA:[], awayGF:[], awayGA:[] }
+  const matchCount = {}; // team -> number of matches played so far
+
+  let n = 0, correct = 0, sumLogLoss = 0, sumBrier = 0, sumActual = 0;
+  const buckets = [
+    { label: '<40%', min: 0, max: 0.4, n: 0, sumP: 0, sumY: 0 },
+    { label: '40-50%', min: 0.4, max: 0.5, n: 0, sumP: 0, sumY: 0 },
+    { label: '50-60%', min: 0.5, max: 0.6, n: 0, sumP: 0, sumY: 0 },
+    { label: '60%+', min: 0.6, max: 1.001, n: 0, sumP: 0, sumY: 0 },
+  ];
+
+  fdMatchRows.forEach(m => {
+    const homeReady = (matchCount[m.home] || 0) >= BACKTEST_MIN_PRIOR_MATCHES;
+    const awayReady = (matchCount[m.away] || 0) >= BACKTEST_MIN_PRIOR_MATCHES;
+
+    if(homeReady && awayReady){
+      const homeRates = getTeamRates(m.home, runningStats);
+      const awayRates = getTeamRates(m.away, runningStats);
+      let p = computeBttsYes(homeRates.homeGF, homeRates.homeGA, awayRates.awayGF, awayRates.awayGA, leagueAvg, rho);
+      p = Math.min(1-EPS, Math.max(EPS, p));
+      const y = (m.fthg > 0 && m.ftag > 0) ? 1 : 0;
+
+      n++;
+      sumActual += y;
+      if((p >= 0.5 ? 1 : 0) === y) correct++;
+      sumLogLoss += -(y*Math.log(p) + (1-y)*Math.log(1-p));
+      sumBrier += (p-y)*(p-y);
+
+      const bucket = buckets.find(b => p >= b.min && p < b.max) || buckets[buckets.length-1];
+      bucket.n++; bucket.sumP += p; bucket.sumY += y;
+    }
+
+    // record this match's actual result for future predictions
+    if(!runningStats[m.home]) runningStats[m.home] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
+    if(!runningStats[m.away]) runningStats[m.away] = { homeGF:[], homeGA:[], awayGF:[], awayGA:[] };
+    runningStats[m.home].homeGF.push(m.fthg); runningStats[m.home].homeGA.push(m.ftag);
+    runningStats[m.away].awayGF.push(m.ftag); runningStats[m.away].awayGA.push(m.fthg);
+    matchCount[m.home] = (matchCount[m.home]||0) + 1;
+    matchCount[m.away] = (matchCount[m.away]||0) + 1;
+  });
+
+  if(n === 0){
+    statusEl.className = 'hint status-err';
+    statusEl.textContent = `ข้อมูลมีน้อยเกินไป (แต่ละทีมต้องมีประวัติอย่างน้อย ${BACKTEST_MIN_PRIOR_MATCHES} นัดก่อนถึงจะเริ่มทดสอบได้) ลองเลือกฤดูกาลที่จบแล้วแทน`;
+    return;
+  }
+
+  const accuracy = correct / n;
+  const avgLogLoss = sumLogLoss / n;
+  const avgBrier = sumBrier / n;
+  const baseRate = sumActual / n;
+  const baseRateClamped = Math.min(1-EPS, Math.max(EPS, baseRate));
+  const baseAccuracy = Math.max(baseRate, 1-baseRate);
+  const baseLogLoss = -(baseRateClamped*Math.log(baseRateClamped) + (1-baseRateClamped)*Math.log(1-baseRateClamped));
+  const baseBrier = baseRate * (1-baseRate);
+
+  statusEl.className = 'hint status-ok';
+  statusEl.textContent = `ทดสอบแล้ว ${n} นัด (ข้าม ${fdMatchRows.length - n} นัดแรกๆ ที่ทีมยังมีประวัติไม่พอ) — baseline คือการเดา "อัตรา BTTS เฉลี่ยของฤดูกาลนี้เสมอ" (${(baseRate*100).toFixed(1)}%) โดยไม่ดูทีมเลย`;
+
+  let bucketRows = '';
+  buckets.forEach(b => {
+    if(b.n === 0) return;
+    bucketRows += `<tr><td>${b.label}</td><td>${b.n}</td><td>${(b.sumP/b.n*100).toFixed(1)}%</td><td>${(b.sumY/b.n*100).toFixed(1)}%</td></tr>`;
+  });
+
+  resultsEl.innerHTML = `
+    <div class="backtest-metrics">
+      <div class="backtest-metric">
+        <div class="m-label">ความแม่นยำ (threshold 50%)</div>
+        <div class="m-val">${(accuracy*100).toFixed(1)}%</div>
+        <div class="m-base">baseline (เดาเสียงข้างมากเสมอ): ${(baseAccuracy*100).toFixed(1)}%</div>
+      </div>
+      <div class="backtest-metric">
+        <div class="m-label">Log-loss (ยิ่งต่ำยิ่งดี)</div>
+        <div class="m-val">${avgLogLoss.toFixed(3)}</div>
+        <div class="m-base">baseline: ${baseLogLoss.toFixed(3)}</div>
+      </div>
+      <div class="backtest-metric">
+        <div class="m-label">Brier score (ยิ่งต่ำยิ่งดี)</div>
+        <div class="m-val">${avgBrier.toFixed(3)}</div>
+        <div class="m-base">baseline: ${baseBrier.toFixed(3)}</div>
+      </div>
+      <div class="backtest-metric">
+        <div class="m-label">อัตรา BTTS จริงของฤดูกาลนี้</div>
+        <div class="m-val">${(baseRate*100).toFixed(1)}%</div>
+        <div class="m-base">จาก ${n} นัดที่ทดสอบ</div>
+      </div>
+    </div>
+    <table class="calib">
+      <tr><th>ช่วง % ที่โมเดลทาย</th><th>จำนวนนัด</th><th>ค่าเฉลี่ยที่โมเดลทาย</th><th>อัตรา BTTS จริง</th></tr>
+      ${bucketRows}
+    </table>
+    <div class="hint" style="margin-top:10px">คอลัมน์ขวาสองคอลัมน์ควรใกล้เคียงกันในแต่ละแถวถ้าโมเดล calibrate ดี (เช่น นัดที่โมเดลทาย 60%+ ควรเกิด BTTS จริงราวๆ 60%+ ด้วย) — ทั้งหมดนี้ใช้ league average ของทั้งฤดูกาล (ไม่ใช่แบบ rolling ถึงแค่วันนั้น) เพื่อ normalize attack/defense ซึ่งเป็นจุดที่ยังมี lookahead เล็กน้อย ผลจริงอาจแม่นน้อยกว่านี้เล็กน้อยถ้าใช้แบบ real-time</div>
+  `;
 }
 
 // football-data.co.uk league code -> football-data.org competition code
@@ -766,6 +920,34 @@ function tau(x,y,lh,la,rho){
   return 1;
 }
 
+// Core model: attack/defense ratings -> expected goals -> Poisson + Dixon-Coles
+// scoreline matrix -> P(BTTS Yes). Shared by the live calculator and the
+// backtest, so a backtest result always reflects exactly what the live
+// calculator would have shown.
+function computeBttsYes(homeGF, homeGA, awayGF, awayGA, leagueAvg, rho){
+  const leagueAvgPerTeam = leagueAvg / 2;
+  const homeAttack = homeGF / leagueAvgPerTeam;
+  const homeDefense = homeGA / leagueAvgPerTeam;
+  const awayAttack = awayGF / leagueAvgPerTeam;
+  const awayDefense = awayGA / leagueAvgPerTeam;
+
+  const lambdaHome = homeAttack * awayDefense * leagueAvgPerTeam;
+  const lambdaAway = awayAttack * homeDefense * leagueAvgPerTeam;
+
+  const maxGoals = 8;
+  let total = 0;
+  let bttsYesRaw = 0;
+  for(let x=0;x<=maxGoals;x++){
+    for(let y=0;y<=maxGoals;y++){
+      let p = poissonP(x, lambdaHome) * poissonP(y, lambdaAway) * tau(x,y,lambdaHome,lambdaAway,rho);
+      if(p<0) p=0;
+      total += p;
+      if(x>=1 && y>=1) bttsYesRaw += p;
+    }
+  }
+  return bttsYesRaw / total;
+}
+
 function calculate(){
   const homeGF = parseFloat(document.getElementById('homeGF').value);
   const homeGA = parseFloat(document.getElementById('homeGA').value);
@@ -776,45 +958,7 @@ function calculate(){
   const marketOddsRaw = document.getElementById('marketOdds').value;
   const marketOddsNoRaw = document.getElementById('marketOddsNo').value;
 
-  // League average goals per team per game (assume symmetric split of total)
-  const leagueAvgPerTeam = leagueAvg / 2;
-
-  // attack/defense strength relative to league average
-  const homeAttack = homeGF / leagueAvgPerTeam;
-  const homeDefense = homeGA / leagueAvgPerTeam;
-  const awayAttack = awayGF / leagueAvgPerTeam;
-  const awayDefense = awayGA / leagueAvgPerTeam;
-
-  // expected goals
-  const lambdaHome = homeAttack * awayDefense * leagueAvgPerTeam;
-  const lambdaAway = awayAttack * homeDefense * leagueAvgPerTeam;
-
-  const maxGoals = 8;
-  let matrix = [];
-  let total = 0;
-  for(let x=0;x<=maxGoals;x++){
-    let row = [];
-    for(let y=0;y<=maxGoals;y++){
-      let p = poissonP(x, lambdaHome) * poissonP(y, lambdaAway) * tau(x,y,lambdaHome,lambdaAway,rho);
-      if(p<0) p=0;
-      row.push(p);
-      total += p;
-    }
-    matrix.push(row);
-  }
-  // normalize
-  for(let x=0;x<=maxGoals;x++){
-    for(let y=0;y<=maxGoals;y++){
-      matrix[x][y] = matrix[x][y]/total;
-    }
-  }
-
-  let bttsYes = 0;
-  for(let x=1;x<=maxGoals;x++){
-    for(let y=1;y<=maxGoals;y++){
-      bttsYes += matrix[x][y];
-    }
-  }
+  const bttsYes = computeBttsYes(homeGF, homeGA, awayGF, awayGA, leagueAvg, rho);
   const bttsNo = 1 - bttsYes;
 
   document.getElementById('yesProb').textContent = (bttsYes*100).toFixed(1)+'%';
