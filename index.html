@@ -629,7 +629,7 @@ function checkArbWarning(oddsYesRaw, oddsNoRaw){
   }
 }
 
-const BACKTEST_MIN_PRIOR_MATCHES = 3; // skip predicting until a team has at least this many matches of history
+const BACKTEST_MIN_PRIOR_MATCHES = 6; // skip predicting until a team has at least this many matches of history
 
 function runBacktest(){
   const statusEl = document.getElementById('backtestStatus');
