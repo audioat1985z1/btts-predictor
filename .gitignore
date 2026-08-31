@@ -2,3 +2,5 @@ node_modules/
 .vercel
 *.exe
 .DS_Store
+fixtures.csv
+recovery-codes.txt
